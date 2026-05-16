@@ -568,7 +568,46 @@ function llCollectPlaylistUris(node) {
 
 //#region Auto-On-Play
 
-function llRestartAutoOnPlay() { /* implemented in Task 15 */ }
+let llAOPProgressHandler = null;
+let llAOPSongChangeHandler = null;
+let llAOPCurrentMarked = false;
+
+function llStartAutoOnPlay() {
+  if (!llConfig.autoOnPlay.enabled) return;
+  llAOPCurrentMarked = false;
+  llAOPSongChangeHandler = () => { llAOPCurrentMarked = false; };
+  llAOPProgressHandler = (ev) => {
+    if (llAOPCurrentMarked) return;
+    const data = Spicetify.Player?.data;
+    if (!data?.item) return;
+    const dur = data.item.duration?.milliseconds ?? data.item.duration_ms ?? 0;
+    if (!dur) return;
+    const pos = (ev && typeof ev.data === 'number') ? ev.data : Spicetify.Player.getProgress?.() ?? 0;
+    const pct = (pos / dur) * 100;
+    if (pct >= llConfig.autoOnPlay.percentThreshold) {
+      const uri = data.item.uri;
+      if (uri && !llIsTrackListened(uri)) {
+        llMarkMany([uri], 'auto-play');
+      }
+      llAOPCurrentMarked = true;
+    }
+  };
+  Spicetify.Player.addEventListener('songchange', llAOPSongChangeHandler);
+  Spicetify.Player.addEventListener('onprogress', llAOPProgressHandler);
+}
+
+function llStopAutoOnPlay() {
+  if (llAOPSongChangeHandler) Spicetify.Player.removeEventListener('songchange', llAOPSongChangeHandler);
+  if (llAOPProgressHandler) Spicetify.Player.removeEventListener('onprogress', llAOPProgressHandler);
+  llAOPSongChangeHandler = null;
+  llAOPProgressHandler = null;
+  llAOPCurrentMarked = false;
+}
+
+function llRestartAutoOnPlay() {
+  llStopAutoOnPlay();
+  if (llConfig.autoOnPlay.enabled) llStartAutoOnPlay();
+}
 
 //#endregion
 
@@ -914,6 +953,7 @@ async function main() {
   llStartAlbumCardSurface();
   llStartNowPlayingSurface();
   llRegisterProfileMenu();
+  llStartAutoOnPlay();
 
   if (llConfig.autoSeed.enabled && !llConfig.autoSeed.lastSeededAt) {
     llRunAutoSeed()
