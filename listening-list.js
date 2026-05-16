@@ -86,6 +86,32 @@ const LL_GEAR_SVG_PATH = 'M9.405 1.05c-.413-1.4-2.397-1.4-2.81 0l-.1.34a1.464 1.
 /** Export schema version (matches data schema for now) */
 const LL_EXPORT_SCHEMA_VERSION = 1;
 
+const LL_BASE_CSS = `
+  .ll-badge { display: inline-flex; align-items: center; justify-content: center; color: var(--spice-button, #1ed760); pointer-events: none; }
+  .ll-badge--tracklist { width: 14px; height: 14px; margin-right: 6px; vertical-align: middle; }
+  .ll-badge--header { width: 18px; height: 18px; margin-left: 8px; vertical-align: middle; }
+  .ll-badge--card { position: absolute; top: 6px; left: 6px; width: 22px; height: 22px; background: rgba(0,0,0,0.6); border-radius: 50%; padding: 3px; }
+  .ll-badge--nowplaying { width: 12px; height: 12px; margin-left: 6px; vertical-align: middle; }
+  .ll-badge--style-dot svg { display: none; }
+  .ll-badge--style-dot::after { content: ""; display: block; width: 6px; height: 6px; border-radius: 50%; background: var(--spice-button, #1ed760); }
+  .ll-badge--style-text svg { display: none; }
+  .ll-badge--style-text::after { content: "✓"; font-size: 11px; line-height: 1; color: var(--spice-button, #1ed760); }
+`;
+
+function llEnsureStyles() {
+  if (document.getElementById(LL_STYLE_ID)) return;
+  const s = document.createElement('style');
+  s.id = LL_STYLE_ID;
+  s.textContent = LL_BASE_CSS;
+  document.head.appendChild(s);
+}
+
+function llBadgeMarkup(extraClass) {
+  const styleClass = llConfig.badgeStyle === 'dot' ? ' ll-badge--style-dot'
+                    : llConfig.badgeStyle === 'text' ? ' ll-badge--style-text' : '';
+  return `<span class="${LL_BADGE_CLASS} ${extraClass}${styleClass}" title="Listened" aria-label="Listened"><svg viewBox="0 0 16 16" width="100%" height="100%" fill="currentColor"><path d="${LL_CHECK_SVG_PATH}"/></svg></span>`;
+}
+
 //#endregion
 
 //#region State
@@ -279,7 +305,66 @@ function llUnmarkMany(uris) {
 //#endregion
 
 //#region Surfaces / Tracklist Rows
-// (populated in Task 8)
+
+let llTracklistObserver = null;
+let llTracklistUnsub = null;
+let llTracklistHistoryUnlisten = null;
+
+function llStartTracklistSurface() {
+  if (!llConfig.surfaces.tracklistRows) return;
+  llEnsureStyles();
+  llDecorateAllTracklistRows();
+  llTracklistObserver = new MutationObserver(() => llDecorateAllTracklistRows());
+  llTracklistObserver.observe(document.body, { childList: true, subtree: true });
+  llTracklistUnsub = llSubscribe(() => llDecorateAllTracklistRows());
+  llTracklistHistoryUnlisten = Spicetify.Platform?.History?.listen?.(() => llDecorateAllTracklistRows()) || null;
+}
+
+function llStopTracklistSurface() {
+  llTracklistObserver?.disconnect();
+  llTracklistObserver = null;
+  llTracklistUnsub?.();
+  llTracklistUnsub = null;
+  llTracklistHistoryUnlisten?.();
+  llTracklistHistoryUnlisten = null;
+  document.querySelectorAll(`.${LL_BADGE_TRACKLIST_CLASS}`).forEach((el) => el.remove());
+}
+
+function llDecorateAllTracklistRows() {
+  const rows = document.querySelectorAll('[data-testid="tracklist-row"]');
+  rows.forEach(llDecorateTracklistRow);
+}
+
+function llDecorateTracklistRow(row) {
+  if (row.dataset.llProcessed === '1' && !llRowNeedsRefresh(row)) return;
+  const anchors = row.querySelectorAll('a[href^="/track/"], a[href^="/album/"]');
+  let uri = null;
+  for (const a of anchors) {
+    uri = llNormalizeUri(a.getAttribute('href'));
+    if (uri) break;
+  }
+  const existing = row.querySelector(`.${LL_BADGE_TRACKLIST_CLASS}`);
+  const listened = uri && (llIsAlbumListened(uri) || llIsTrackListened(uri));
+  if (listened) {
+    if (!existing) {
+      const first = row.firstElementChild;
+      if (first) {
+        const wrap = document.createElement('span');
+        wrap.innerHTML = llBadgeMarkup(LL_BADGE_TRACKLIST_CLASS);
+        first.prepend(wrap.firstElementChild);
+      }
+    }
+  } else if (existing) {
+    existing.remove();
+  }
+  row.dataset.llProcessed = '1';
+  row.dataset.llStatus = listened ? '1' : '0';
+}
+
+function llRowNeedsRefresh(row) {
+  return false;
+}
+
 //#endregion
 
 //#region Surfaces / Album Header
@@ -376,6 +461,7 @@ async function main() {
   llSaveConfig();
 
   llRegisterContextMenu();
+  llStartTracklistSurface();
 
   console.log('[Listening List] Booted.');
 }
