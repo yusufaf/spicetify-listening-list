@@ -194,7 +194,34 @@ function llDeepMerge(base, override, ...extras) {
 //#endregion
 
 //#region URI Helpers
-// (populated in Task 5)
+
+function llParseUri(uri) {
+  if (typeof uri !== 'string') return null;
+  try {
+    return Spicetify.URI.fromString(uri);
+  } catch {
+    return null;
+  }
+}
+
+function llIsAlbumUri(uri) {
+  const p = llParseUri(uri);
+  return !!p && p.type === Spicetify.URI.Type.ALBUM;
+}
+
+function llIsTrackUri(uri) {
+  const p = llParseUri(uri);
+  return !!p && p.type === Spicetify.URI.Type.TRACK;
+}
+
+function llNormalizeUri(input) {
+  if (!input) return null;
+  if (typeof input === 'string' && input.startsWith('spotify:')) return input;
+  const m = typeof input === 'string' && input.match(/\/(album|track)\/([A-Za-z0-9]+)/);
+  if (m) return `spotify:${m[1]}:${m[2]}`;
+  return null;
+}
+
 //#endregion
 
 //#region Marking
