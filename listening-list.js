@@ -419,7 +419,59 @@ function llDecorateAlbumHeader() {
 //#endregion
 
 //#region Surfaces / Album Cards
-// (populated in Task 10)
+
+let llCardObserver = null;
+let llCardHistoryUnlisten = null;
+let llCardUnsub = null;
+
+function llStartAlbumCardSurface() {
+  if (!llConfig.surfaces.albumCards) return;
+  llEnsureStyles();
+  const tick = () => llDecorateAllAlbumCards();
+  tick();
+  llCardObserver = new MutationObserver(tick);
+  llCardObserver.observe(document.body, { childList: true, subtree: true });
+  llCardHistoryUnlisten = Spicetify.Platform?.History?.listen?.(tick) || null;
+  llCardUnsub = llSubscribe(tick);
+}
+
+function llStopAlbumCardSurface() {
+  llCardObserver?.disconnect();
+  llCardObserver = null;
+  llCardHistoryUnlisten?.();
+  llCardHistoryUnlisten = null;
+  llCardUnsub?.();
+  llCardUnsub = null;
+  document.querySelectorAll(`.${LL_BADGE_CARD_CLASS}`).forEach((el) => el.remove());
+}
+
+function llDecorateAllAlbumCards() {
+  const candidates = document.querySelectorAll('[data-testid="card-click-handler"], [data-encore-id="card"]');
+  candidates.forEach((c) => llDecorateAlbumCard(c));
+  document.querySelectorAll('a[href^="/album/"]').forEach((a) => {
+    const card = a.closest('[data-testid="card-click-handler"], [data-encore-id="card"], .main-card-card');
+    if (card) llDecorateAlbumCard(card, a);
+  });
+}
+
+function llDecorateAlbumCard(card, anchorHint) {
+  const anchor = anchorHint || card.querySelector('a[href^="/album/"]');
+  if (!anchor) return;
+  const uri = llNormalizeUri(anchor.getAttribute('href'));
+  if (!uri) return;
+  const listened = llIsAlbumListened(uri);
+  const existing = card.querySelector(`.${LL_BADGE_CARD_CLASS}`);
+  if (listened && !existing) {
+    const imgWrap = card.querySelector('img')?.parentElement || card;
+    if (getComputedStyle(imgWrap).position === 'static') imgWrap.style.position = 'relative';
+    const span = document.createElement('span');
+    span.innerHTML = llBadgeMarkup(LL_BADGE_CARD_CLASS);
+    imgWrap.appendChild(span.firstElementChild);
+  } else if (!listened && existing) {
+    existing.remove();
+  }
+}
+
 //#endregion
 
 //#region Surfaces / Now Playing
@@ -510,6 +562,7 @@ async function main() {
   llRegisterContextMenu();
   llStartTracklistSurface();
   llStartAlbumHeaderSurface();
+  llStartAlbumCardSurface();
 
   console.log('[Listening List] Booted.');
 }
