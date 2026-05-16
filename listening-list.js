@@ -817,9 +817,10 @@ const LL_MODAL_CSS = `
   #${LL_MODAL_ROOT_ID} table { width: 100%; border-collapse: collapse; font-size: 12px; }
   #${LL_MODAL_ROOT_ID} th, #${LL_MODAL_ROOT_ID} td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--spice-card, #222); }
   #${LL_MODAL_ROOT_ID} th { cursor: pointer; user-select: none; }
-  #${LL_MODAL_ROOT_ID} td a { text-decoration: none; }
+  #${LL_MODAL_ROOT_ID} td a { text-decoration: none; color: var(--spice-text); }
   #${LL_MODAL_ROOT_ID} td a:hover { text-decoration: underline; }
-  #${LL_MODAL_ROOT_ID} .ll-artist-link:hover { color: var(--spice-text) !important; }
+  #${LL_MODAL_ROOT_ID} .ll-artist-link { color: inherit; }
+  #${LL_MODAL_ROOT_ID} .ll-artist-link:hover { color: var(--spice-text); text-decoration: underline; }
 `;
 
 let llActiveTab = 'viewer';
@@ -1185,7 +1186,7 @@ function llRenderViewerTable() {
     const artistName = escHtml(m.artist || '');
     if (m.artistUri && m.artistUri.startsWith('spotify:artist:')) {
       const aid = m.artistUri.split(':').pop();
-      return `<a href="/artist/${aid}" class="ll-artist-link" data-artist-path="/artist/${aid}" style="color:inherit; text-decoration:none;">${artistName}</a>`;
+      return `<a href="/artist/${aid}" class="ll-artist-link" data-artist-path="/artist/${aid}">${artistName}</a>`;
     }
     return artistName;
   };
