@@ -1142,7 +1142,7 @@ function llRegisterContextMenu() {
       Spicetify.showNotification?.(`Marked ${marked} as listened${skipped ? ` (${skipped} already)` : ''}`);
     },
     llShouldShowMark,
-    `<svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="${LL_CHECK_SVG_PATH}"/></svg>`,
+    'check',
   );
   const unmarkItem = new Spicetify.ContextMenu.Item(
     'Unmark as listened',
@@ -1151,6 +1151,7 @@ function llRegisterContextMenu() {
       Spicetify.showNotification?.(`Unmarked ${removed}`);
     },
     llShouldShowUnmark,
+    'x',
   );
   markItem.register();
   unmarkItem.register();
@@ -1165,7 +1166,7 @@ function llRegisterProfileMenu() {
     'Listening List',
     false,
     () => llOpenModal('settings'),
-    `<svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="${LL_CHECK_SVG_PATH}"/></svg>`,
+    'check',
   );
   item.register();
 }
