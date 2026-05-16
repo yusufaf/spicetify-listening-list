@@ -935,10 +935,130 @@ function llSettingsData() {
   sec.appendChild(row);
   return sec;
 }
+let llViewerState = { kind: 'albums', sortKey: 'listenedAt', sortDir: 'desc', filter: '' };
+
 function llRenderViewerTab() {
-  const d = document.createElement('div');
-  d.textContent = 'Viewer (Task 17)';
-  return d;
+  const root = document.createElement('div');
+  const subTabs = document.createElement('div');
+  subTabs.className = 'll-tabs';
+  for (const [k, label] of [['albums', 'Albums'], ['tracks', 'Tracks']]) {
+    const b = document.createElement('button');
+    b.className = 'll-tab' + (llViewerState.kind === k ? ' is-active' : '');
+    b.textContent = label;
+    b.addEventListener('click', () => { llViewerState.kind = k; renderBody(); refreshTabs(); });
+    subTabs.appendChild(b);
+  }
+  root.appendChild(subTabs);
+
+  const filter = document.createElement('input');
+  filter.type = 'text';
+  filter.placeholder = 'Filter by URI';
+  filter.value = llViewerState.filter;
+  filter.style.width = '100%';
+  filter.style.margin = '8px 0';
+  filter.style.padding = '6px';
+  filter.style.background = 'var(--spice-card, #222)';
+  filter.style.color = 'var(--spice-text)';
+  filter.style.border = '1px solid var(--spice-subtext, #555)';
+  filter.style.borderRadius = '4px';
+  filter.addEventListener('input', () => { llViewerState.filter = filter.value; renderBody(); });
+  root.appendChild(filter);
+
+  const bodyHost = document.createElement('div');
+  root.appendChild(bodyHost);
+
+  function refreshTabs() {
+    subTabs.querySelectorAll('.ll-tab').forEach((el, i) => {
+      el.classList.toggle('is-active', ['albums', 'tracks'][i] === llViewerState.kind);
+    });
+  }
+
+  function renderBody() {
+    bodyHost.innerHTML = '';
+    bodyHost.appendChild(llRenderViewerTable());
+  }
+
+  renderBody();
+  return root;
+}
+
+function llRenderViewerTable() {
+  const source = llViewerState.kind === 'albums' ? llData.albums : llData.tracks;
+  const f = llViewerState.filter.trim().toLowerCase();
+  let entries = Object.entries(source).filter(([uri]) => !f || uri.toLowerCase().includes(f));
+  entries.sort((a, b) => {
+    const aKey = llViewerState.sortKey === 'uri' ? a[0] : a[1].listenedAt;
+    const bKey = llViewerState.sortKey === 'uri' ? b[0] : b[1].listenedAt;
+    const cmp = aKey > bKey ? 1 : aKey < bKey ? -1 : 0;
+    return llViewerState.sortDir === 'asc' ? cmp : -cmp;
+  });
+
+  const wrap = document.createElement('div');
+  wrap.style.maxHeight = '50vh';
+  wrap.style.overflowY = 'auto';
+
+  if (entries.length === 0) {
+    wrap.innerHTML = '<p style="opacity:.6">Nothing here yet.</p>';
+    return wrap;
+  }
+
+  const table = document.createElement('table');
+  const thead = document.createElement('thead');
+  thead.innerHTML = `<tr>
+    <th data-sort="uri">URI</th>
+    <th data-sort="listenedAt">Listened</th>
+    <th>Source</th>
+    <th></th>
+  </tr>`;
+  thead.querySelectorAll('th[data-sort]').forEach((th) => {
+    th.addEventListener('click', () => {
+      const key = th.getAttribute('data-sort');
+      if (llViewerState.sortKey === key) {
+        llViewerState.sortDir = llViewerState.sortDir === 'asc' ? 'desc' : 'asc';
+      } else {
+        llViewerState.sortKey = key;
+        llViewerState.sortDir = 'desc';
+      }
+      const parent = wrap.parentElement;
+      wrap.replaceWith(llRenderViewerTable());
+      void parent;
+    });
+  });
+  table.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  const max = 500;
+  for (const [uri, rec] of entries.slice(0, max)) {
+    const tr = document.createElement('tr');
+    const id = uri.split(':').pop();
+    const path = llViewerState.kind === 'albums' ? `/album/${id}` : `/track/${id}`;
+    tr.innerHTML = `
+      <td><a href="${path}" style="color:var(--spice-text)">${uri}</a></td>
+      <td>${new Date(rec.listenedAt).toLocaleDateString()}</td>
+      <td>${rec.source}</td>
+      <td><button class="ll-btn ll-btn--ghost" data-act="unmark">Unmark</button></td>
+    `;
+    tr.querySelector('a').addEventListener('click', (e) => {
+      e.preventDefault();
+      Spicetify.Platform?.History?.push(path);
+      Spicetify.PopupModal.hide();
+    });
+    tr.querySelector('button[data-act="unmark"]').addEventListener('click', () => {
+      llUnmarkMany([uri]);
+      tr.remove();
+    });
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  wrap.appendChild(table);
+
+  if (entries.length > max) {
+    const more = document.createElement('p');
+    more.style.opacity = '.6';
+    more.textContent = `Showing first ${max} of ${entries.length}. Use the filter to narrow.`;
+    wrap.appendChild(more);
+  }
+  return wrap;
 }
 function llRenderStatsTab() {
   const d = document.createElement('div');
