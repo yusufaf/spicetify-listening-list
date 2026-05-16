@@ -1,0 +1,16 @@
+node_modules
+
+# Editors
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts (none, but safety)
+build/
+dist/
+
+# Local tooling
+.claude/

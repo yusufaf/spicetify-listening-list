@@ -1,0 +1,19 @@
+{
+  "name": "spicetify-listening-list",
+  "version": "1.0.0",
+  "description": "Spicetify extension: mark albums/tracks as listened.",
+  "main": "listening-list.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "prepare": "husky"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "packageManager": "pnpm@10.24.0",
+  "devDependencies": {
+    "@commitlint/cli": "^20.5.3",
+    "@commitlint/config-conventional": "^20.5.3",
+    "husky": "^9.1.7"
+  }
+}
