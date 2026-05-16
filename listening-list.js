@@ -1179,7 +1179,10 @@ async function main() {
     !Spicetify?.ContextMenu?.Item ||
     !Spicetify?.Menu?.Item ||
     !Spicetify?.URI ||
-    !Spicetify?.Player
+    !Spicetify?.Player ||
+    !Spicetify?.React ||
+    !Spicetify?.ReactJSX?.jsx ||
+    !Spicetify?.ReactComponent?.MenuItem
   ) {
     await new Promise((r) => setTimeout(r, 100));
   }
