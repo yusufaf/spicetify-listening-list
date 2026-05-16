@@ -214,10 +214,15 @@ function llLoadMeta() {
   if (!raw) return { albums: {}, tracks: {} };
   try {
     const parsed = JSON.parse(raw);
-    return {
-      albums: parsed.albums && typeof parsed.albums === 'object' ? parsed.albums : {},
-      tracks: parsed.tracks && typeof parsed.tracks === 'object' ? parsed.tracks : {},
-    };
+    const albums = parsed.albums && typeof parsed.albums === 'object' ? parsed.albums : {};
+    const tracks = parsed.tracks && typeof parsed.tracks === 'object' ? parsed.tracks : {};
+    for (const side of [albums, tracks]) {
+      for (const k of Object.keys(side)) {
+        const m = side[k];
+        if (!m || typeof m !== 'object' || !('artistUri' in m)) delete side[k];
+      }
+    }
+    return { albums, tracks };
   } catch {
     return { albums: {}, tracks: {} };
   }
@@ -814,7 +819,7 @@ const LL_MODAL_CSS = `
   #${LL_MODAL_ROOT_ID} th { cursor: pointer; user-select: none; }
 `;
 
-let llActiveTab = 'settings';
+let llActiveTab = 'viewer';
 
 function llOpenModal(tab) {
   llActiveTab = tab || llActiveTab;
@@ -827,7 +832,7 @@ function llOpenModal(tab) {
   const tabs = document.createElement('div');
   tabs.className = 'll-tabs';
   const tabButtons = {};
-  for (const [key, label] of [['settings', 'Settings'], ['viewer', 'Viewer'], ['stats', 'Stats']]) {
+  for (const [key, label] of [['viewer', 'Viewer'], ['stats', 'Stats'], ['settings', 'Settings']]) {
     const b = document.createElement('button');
     b.className = 'll-tab' + (llActiveTab === key ? ' is-active' : '');
     b.textContent = label;
@@ -1107,13 +1112,19 @@ function llRenderViewerTable() {
   });
 
   const wrap = document.createElement('div');
-  wrap.style.maxHeight = '50vh';
-  wrap.style.overflowY = 'auto';
 
   if (entries.length === 0) {
     wrap.innerHTML = '<p style="opacity:.6">Nothing here yet.</p>';
     return wrap;
   }
+
+  const status = document.createElement('div');
+  status.style.cssText = 'margin:0 0 8px 0; font-size:12px; opacity:.75; display:flex; align-items:center; gap:8px; min-height:18px;';
+  wrap.appendChild(status);
+
+  const scroll = document.createElement('div');
+  scroll.style.cssText = 'max-height:50vh; overflow-y:auto;';
+  wrap.appendChild(scroll);
 
   const kind = llViewerState.kind;
   const metaSide = kind === 'albums' ? llMeta.albums : llMeta.tracks;
@@ -1140,10 +1151,10 @@ function llRenderViewerTable() {
   const titleLabel = kind === 'albums' ? 'Album' : 'Track';
   const arrow = (key) => llViewerState.sortKey === key ? (llViewerState.sortDir === 'asc' ? ' ▲' : ' ▼') : '';
   thead.innerHTML = `<tr>
-    <th data-sort="name">${titleLabel}<span class="ll-sort">${arrow('name')}</span></th>
-    <th data-sort="artist">Artist<span class="ll-sort">${arrow('artist')}</span></th>
-    <th data-sort="listenedAt">Listened<span class="ll-sort">${arrow('listenedAt')}</span></th>
-    <th>Source</th>
+    <th data-sort="name" style="white-space:nowrap">${titleLabel}<span class="ll-sort">${arrow('name')}</span></th>
+    <th data-sort="artist" style="white-space:nowrap">Artist<span class="ll-sort">${arrow('artist')}</span></th>
+    <th data-sort="listenedAt" style="white-space:nowrap">Listened<span class="ll-sort">${arrow('listenedAt')}</span></th>
+    <th style="white-space:nowrap">Source</th>
     <th></th>
   </tr>`;
   thead.querySelectorAll('th[data-sort]').forEach((th) => {
@@ -1212,11 +1223,7 @@ function llRenderViewerTable() {
     tbody.appendChild(tr);
   }
   table.appendChild(tbody);
-  wrap.appendChild(table);
-
-  const status = document.createElement('div');
-  status.style.cssText = 'margin-top:8px; font-size:12px; opacity:.7; display:flex; align-items:center; gap:8px;';
-  wrap.appendChild(status);
+  scroll.appendChild(table);
 
   const missing = visible.map(([u]) => u).filter((u) => !metaSide[u]);
   if (missing.length > 0) {
@@ -1256,10 +1263,8 @@ function llRenderViewerTable() {
         const txt = status.querySelector('.ll-status-text');
         if (txt) txt.textContent = `Loading ${done} / ${total}…`;
       },
-      () => { status.remove(); },
+      () => { status.innerHTML = ''; },
     );
-  } else {
-    status.remove();
   }
 
   if (entries.length > max) {
@@ -1373,7 +1378,7 @@ function llRegisterProfileMenu() {
   const item = new Spicetify.Menu.Item(
     'Listening List',
     false,
-    () => llOpenModal('settings'),
+    () => llOpenModal('viewer'),
   );
   item.register();
 }
