@@ -368,7 +368,54 @@ function llRowNeedsRefresh(row) {
 //#endregion
 
 //#region Surfaces / Album Header
-// (populated in Task 9)
+
+let llHeaderObserver = null;
+let llHeaderHistoryUnlisten = null;
+let llHeaderUnsub = null;
+
+function llStartAlbumHeaderSurface() {
+  if (!llConfig.surfaces.albumHeader) return;
+  llEnsureStyles();
+  const tick = () => llDecorateAlbumHeader();
+  tick();
+  llHeaderObserver = new MutationObserver(tick);
+  llHeaderObserver.observe(document.body, { childList: true, subtree: true });
+  llHeaderHistoryUnlisten = Spicetify.Platform?.History?.listen?.(tick) || null;
+  llHeaderUnsub = llSubscribe(tick);
+}
+
+function llStopAlbumHeaderSurface() {
+  llHeaderObserver?.disconnect();
+  llHeaderObserver = null;
+  llHeaderHistoryUnlisten?.();
+  llHeaderHistoryUnlisten = null;
+  llHeaderUnsub?.();
+  llHeaderUnsub = null;
+  document.querySelectorAll(`.${LL_BADGE_HEADER_CLASS}`).forEach((el) => el.remove());
+}
+
+function llCurrentAlbumUriFromRoute() {
+  const path = Spicetify.Platform?.History?.location?.pathname || location.pathname;
+  const m = path.match(/^\/album\/([A-Za-z0-9]+)/);
+  return m ? `spotify:album:${m[1]}` : null;
+}
+
+function llDecorateAlbumHeader() {
+  const uri = llCurrentAlbumUriFromRoute();
+  document.querySelectorAll(`.${LL_BADGE_HEADER_CLASS}`).forEach((el) => el.remove());
+  if (!uri || !llIsAlbumListened(uri)) return;
+  const title = document.querySelector('[data-testid="entityTitle"] h1, [data-testid="entityTitle"], main h1');
+  if (!title || title.dataset.llHeaderTagged === '1') return;
+  const span = document.createElement('span');
+  span.innerHTML = llBadgeMarkup(LL_BADGE_HEADER_CLASS);
+  const rec = llData.albums[uri];
+  if (rec?.listenedAt) {
+    span.firstElementChild.setAttribute('title', `Listened on ${new Date(rec.listenedAt).toLocaleDateString()}`);
+  }
+  title.appendChild(span.firstElementChild);
+  title.dataset.llHeaderTagged = '1';
+}
+
 //#endregion
 
 //#region Surfaces / Album Cards
@@ -462,6 +509,7 @@ async function main() {
 
   llRegisterContextMenu();
   llStartTracklistSurface();
+  llStartAlbumHeaderSurface();
 
   console.log('[Listening List] Booted.');
 }
