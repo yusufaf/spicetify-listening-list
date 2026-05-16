@@ -269,27 +269,25 @@ async function llFetchOneTrackMeta(uri) {
   return null;
 }
 
-async function llFetchMetadata(uris, kind, onProgress) {
+async function llFetchMetadata(uris, kind, onItem, onDone) {
   const target = kind === 'albums' ? llMeta.albums : llMeta.tracks;
   const need = uris.filter((u) => !target[u] && !llMetaInflight.has(u));
-  if (need.length === 0) return;
+  if (need.length === 0) { onDone?.(0); return; }
   for (const u of need) llMetaInflight.add(u);
   const fetcher = kind === 'albums' ? llFetchOneAlbumMeta : llFetchOneTrackMeta;
   const concurrency = 4;
   let cursor = 0;
   let saveAt = 0;
+  let completed = 0;
   async function worker() {
     while (cursor < need.length) {
-      const i = cursor++;
-      const uri = need[i];
+      const uri = need[cursor++];
       const meta = await fetcher(uri);
       if (meta) target[uri] = meta;
+      completed++;
       saveAt++;
-      if (saveAt >= 10 || i === need.length - 1) {
-        saveAt = 0;
-        llSaveMeta();
-        onProgress?.();
-      }
+      if (saveAt >= 10) { saveAt = 0; llSaveMeta(); }
+      try { onItem?.(uri, meta, completed, need.length); } catch (e) { console.warn('[Listening List] onItem error', e); }
     }
   }
   try {
@@ -297,7 +295,7 @@ async function llFetchMetadata(uris, kind, onProgress) {
   } finally {
     for (const u of need) llMetaInflight.delete(u);
     llSaveMeta();
-    onProgress?.();
+    try { onDone?.(need.length); } catch (e) { console.warn('[Listening List] onDone error', e); }
   }
 }
 
@@ -1163,14 +1161,15 @@ function llRenderViewerTable() {
   const visible = entries.slice(0, max);
   for (const [uri, rec] of visible) {
     const tr = document.createElement('tr');
+    tr.dataset.uri = uri;
     const id = uri.split(':').pop();
     const path = kind === 'albums' ? `/album/${id}` : `/track/${id}`;
     const m = metaSide[uri];
-    const name = m?.name || '…';
+    const nameCell = m?.name || '<span style="opacity:.4">…</span>';
     const artist = m?.artist || '';
     tr.innerHTML = `
-      <td><a href="${path}" style="color:var(--spice-text)" title="${uri}">${name}</a></td>
-      <td style="opacity:.8">${artist}</td>
+      <td class="ll-name-cell"><a href="${path}" style="color:var(--spice-text)" title="${uri}">${nameCell}</a></td>
+      <td class="ll-artist-cell" style="opacity:.8">${artist}</td>
       <td>${new Date(rec.listenedAt).toLocaleDateString()}</td>
       <td>${rec.source}</td>
       <td><button class="ll-btn ll-btn--ghost" data-act="unmark">Unmark</button></td>
@@ -1189,11 +1188,41 @@ function llRenderViewerTable() {
   table.appendChild(tbody);
   wrap.appendChild(table);
 
+  const status = document.createElement('div');
+  status.style.cssText = 'margin-top:8px; font-size:12px; opacity:.7; display:flex; align-items:center; gap:8px;';
+  wrap.appendChild(status);
+
   const missing = visible.map(([u]) => u).filter((u) => !metaSide[u]);
   if (missing.length > 0) {
-    llFetchMetadata(missing, kind, () => {
-      if (wrap.isConnected) wrap.replaceWith(llRenderViewerTable());
-    });
+    status.innerHTML = `<span class="ll-spinner" style="display:inline-block;width:12px;height:12px;border:2px solid var(--spice-subtext,#999);border-top-color:var(--spice-button,#1ed760);border-radius:50%;animation:ll-spin 0.8s linear infinite;"></span><span class="ll-status-text">Loading 0 / ${missing.length}…</span>`;
+    if (!document.getElementById('ll-spinner-css')) {
+      const s = document.createElement('style');
+      s.id = 'll-spinner-css';
+      s.textContent = '@keyframes ll-spin { to { transform: rotate(360deg); } }';
+      document.head.appendChild(s);
+    }
+    const patchRow = (uri) => {
+      const tr = tbody.querySelector(`tr[data-uri="${CSS.escape(uri)}"]`);
+      if (!tr) return;
+      const m = metaSide[uri];
+      if (!m) return;
+      const a = tr.querySelector('.ll-name-cell a');
+      if (a) a.textContent = m.name || a.textContent;
+      const art = tr.querySelector('.ll-artist-cell');
+      if (art) art.textContent = m.artist || '';
+    };
+    llFetchMetadata(
+      missing,
+      kind,
+      (uri, _meta, done, total) => {
+        patchRow(uri);
+        const txt = status.querySelector('.ll-status-text');
+        if (txt) txt.textContent = `Loading ${done} / ${total}…`;
+      },
+      () => { status.remove(); },
+    );
+  } else {
+    status.remove();
   }
 
   if (entries.length > max) {
