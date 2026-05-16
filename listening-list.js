@@ -518,7 +518,51 @@ function llDecorateNowPlaying() {
 
 //#region Auto-Seed
 
-async function llRunAutoSeed() { throw new Error('Auto-seed not yet implemented (Task 14)'); }
+async function llRunAutoSeed() {
+  const rootlist = Spicetify.Platform?.RootlistAPI;
+  const plAPI = Spicetify.Platform?.PlaylistAPI;
+  if (!rootlist || !plAPI) {
+    Spicetify.showNotification?.('Playlist API unavailable on this Spotify version');
+    throw new Error('Platform.RootlistAPI or PlaylistAPI missing');
+  }
+  const root = await rootlist.getContents();
+  const playlistUris = llCollectPlaylistUris(root);
+  const albumCounts = new Map();
+  let playlistsScanned = 0;
+  for (const plUri of playlistUris) {
+    try {
+      const contents = await plAPI.getContents(plUri);
+      const items = contents?.items || contents?.rows || [];
+      for (const it of items) {
+        const albumUri = it?.album?.uri || it?.albumOfTrack?.uri || it?.item?.album?.uri;
+        if (albumUri && albumUri.startsWith('spotify:album:')) {
+          albumCounts.set(albumUri, (albumCounts.get(albumUri) || 0) + 1);
+        }
+      }
+      playlistsScanned++;
+    } catch (e) {
+      console.warn('[Listening List] Failed to read playlist', plUri, e);
+    }
+  }
+  const min = Math.max(1, llConfig.autoSeed.minTracksPerAlbum);
+  const toMark = [];
+  for (const [uri, count] of albumCounts) {
+    if (count >= min) toMark.push(uri);
+  }
+  const { marked } = llMarkMany(toMark, 'auto-playlist');
+  llConfig.autoSeed.lastSeededAt = Date.now();
+  llSaveConfig();
+  return { playlistsScanned, candidates: toMark.length, markedAlbums: marked };
+}
+
+function llCollectPlaylistUris(node) {
+  const out = [];
+  if (!node) return out;
+  if (node.type === 'playlist' && node.uri) out.push(node.uri);
+  const children = node.items || node.rows || node.children || [];
+  for (const c of children) out.push(...llCollectPlaylistUris(c));
+  return out;
+}
 
 //#endregion
 
@@ -870,6 +914,12 @@ async function main() {
   llStartAlbumCardSurface();
   llStartNowPlayingSurface();
   llRegisterProfileMenu();
+
+  if (llConfig.autoSeed.enabled && !llConfig.autoSeed.lastSeededAt) {
+    llRunAutoSeed()
+      .then((s) => Spicetify.showNotification?.(`Listening List: seeded ${s.markedAlbums} albums`))
+      .catch((e) => console.warn('[Listening List] First-run auto-seed failed', e));
+  }
 
   console.log('[Listening List] Booted.');
 }
