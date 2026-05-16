@@ -1142,7 +1142,6 @@ function llRegisterContextMenu() {
       Spicetify.showNotification?.(`Marked ${marked} as listened${skipped ? ` (${skipped} already)` : ''}`);
     },
     llShouldShowMark,
-    'check',
   );
   const unmarkItem = new Spicetify.ContextMenu.Item(
     'Unmark as listened',
@@ -1151,7 +1150,6 @@ function llRegisterContextMenu() {
       Spicetify.showNotification?.(`Unmarked ${removed}`);
     },
     llShouldShowUnmark,
-    'x',
   );
   markItem.register();
   unmarkItem.register();
@@ -1166,7 +1164,6 @@ function llRegisterProfileMenu() {
     'Listening List',
     false,
     () => llOpenModal('settings'),
-    'check',
   );
   item.register();
 }
@@ -1176,7 +1173,14 @@ function llRegisterProfileMenu() {
 //#region Main
 
 async function main() {
-  while (!Spicetify?.Platform || !Spicetify?.LocalStorage || !Spicetify?.ContextMenu || !Spicetify?.URI) {
+  while (
+    !Spicetify?.Platform?.History ||
+    !Spicetify?.LocalStorage ||
+    !Spicetify?.ContextMenu?.Item ||
+    !Spicetify?.Menu?.Item ||
+    !Spicetify?.URI ||
+    !Spicetify?.Player
+  ) {
     await new Promise((r) => setTimeout(r, 100));
   }
 
