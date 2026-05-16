@@ -529,7 +529,70 @@ function llDecorateNowPlaying() {
 //#endregion
 
 //#region Modal
-// (populated in Tasks 12, 13, 17, 18)
+
+const LL_MODAL_CSS = `
+  #${LL_MODAL_ROOT_ID} { color: var(--spice-text); }
+  #${LL_MODAL_ROOT_ID} .ll-tabs { display: flex; gap: 8px; border-bottom: 1px solid var(--spice-subtext, #999); margin-bottom: 12px; }
+  #${LL_MODAL_ROOT_ID} .ll-tab { background: none; border: none; color: var(--spice-subtext, #999); padding: 8px 12px; cursor: pointer; border-bottom: 2px solid transparent; }
+  #${LL_MODAL_ROOT_ID} .ll-tab.is-active { color: var(--spice-text); border-bottom-color: var(--spice-button, #1ed760); }
+  #${LL_MODAL_ROOT_ID} .ll-section { margin-bottom: 16px; }
+  #${LL_MODAL_ROOT_ID} .ll-section h3 { margin: 0 0 8px 0; font-size: 14px; }
+  #${LL_MODAL_ROOT_ID} .ll-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; }
+  #${LL_MODAL_ROOT_ID} input[type="number"], #${LL_MODAL_ROOT_ID} input[type="range"] { background: var(--spice-card, #222); color: var(--spice-text); border: 1px solid var(--spice-subtext, #555); border-radius: 4px; padding: 4px; }
+  #${LL_MODAL_ROOT_ID} button.ll-btn { background: var(--spice-button, #1ed760); color: var(--spice-button-text, #000); border: none; border-radius: 16px; padding: 6px 14px; cursor: pointer; }
+  #${LL_MODAL_ROOT_ID} button.ll-btn.ll-btn--ghost { background: transparent; color: var(--spice-text); border: 1px solid var(--spice-subtext, #555); }
+  #${LL_MODAL_ROOT_ID} table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  #${LL_MODAL_ROOT_ID} th, #${LL_MODAL_ROOT_ID} td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--spice-card, #222); }
+  #${LL_MODAL_ROOT_ID} th { cursor: pointer; user-select: none; }
+`;
+
+let llActiveTab = 'settings';
+
+function llOpenModal(tab) {
+  llActiveTab = tab || llActiveTab;
+  const root = document.createElement('div');
+  root.id = LL_MODAL_ROOT_ID;
+  const style = document.createElement('style');
+  style.textContent = LL_MODAL_CSS;
+  root.appendChild(style);
+
+  const tabs = document.createElement('div');
+  tabs.className = 'll-tabs';
+  for (const [key, label] of [['settings', 'Settings'], ['viewer', 'Viewer'], ['stats', 'Stats']]) {
+    const b = document.createElement('button');
+    b.className = 'll-tab' + (llActiveTab === key ? ' is-active' : '');
+    b.textContent = label;
+    b.addEventListener('click', () => { llActiveTab = key; Spicetify.PopupModal.hide(); llOpenModal(key); });
+    tabs.appendChild(b);
+  }
+  root.appendChild(tabs);
+
+  const body = document.createElement('div');
+  body.className = 'll-body';
+  if (llActiveTab === 'settings') body.appendChild(llRenderSettingsTab());
+  else if (llActiveTab === 'viewer') body.appendChild(llRenderViewerTab());
+  else if (llActiveTab === 'stats') body.appendChild(llRenderStatsTab());
+  root.appendChild(body);
+
+  Spicetify.PopupModal.display({ title: 'Listening List', content: root, isLarge: true });
+}
+
+function llRenderSettingsTab() {
+  const d = document.createElement('div');
+  d.textContent = 'Settings (Task 13)';
+  return d;
+}
+function llRenderViewerTab() {
+  const d = document.createElement('div');
+  d.textContent = 'Viewer (Task 17)';
+  return d;
+}
+function llRenderStatsTab() {
+  const d = document.createElement('div');
+  d.textContent = 'Stats (Task 18)';
+  return d;
+}
+
 //#endregion
 
 //#region Context Menu
@@ -577,7 +640,17 @@ function llRegisterContextMenu() {
 //#endregion
 
 //#region Profile Menu
-// (populated in Task 12)
+
+function llRegisterProfileMenu() {
+  const item = new Spicetify.Menu.Item(
+    'Listening List',
+    false,
+    () => llOpenModal('settings'),
+    `<svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="${LL_CHECK_SVG_PATH}"/></svg>`,
+  );
+  item.register();
+}
+
 //#endregion
 
 //#region Main
@@ -602,6 +675,7 @@ async function main() {
   llStartAlbumHeaderSurface();
   llStartAlbumCardSurface();
   llStartNowPlayingSurface();
+  llRegisterProfileMenu();
 
   console.log('[Listening List] Booted.');
 }
