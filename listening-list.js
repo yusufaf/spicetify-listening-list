@@ -231,36 +231,73 @@ function llSaveMeta() {
   }
 }
 
+async function llFetchOneAlbumMeta(uri) {
+  const id = uri.split(':').pop();
+  try {
+    const res = await Spicetify.CosmosAsync.get(`wg://album/v1/album-app/album/${id}/desktop`);
+    if (res?.name) return { name: res.name, artist: res.artists?.[0]?.name || '' };
+  } catch {}
+  try {
+    if (Spicetify.GraphQL?.Request && Spicetify.GraphQL?.Definitions?.getAlbum) {
+      const res = await Spicetify.GraphQL.Request(
+        Spicetify.GraphQL.Definitions.getAlbum,
+        { uri, locale: Spicetify.Locale?.getLocale?.() || 'en', limit: 1, offset: 0 },
+      );
+      const a = res?.data?.albumUnion;
+      if (a?.name) return { name: a.name, artist: a.artists?.items?.[0]?.profile?.name || '' };
+    }
+  } catch {}
+  return null;
+}
+
+async function llFetchOneTrackMeta(uri) {
+  try {
+    if (Spicetify.GraphQL?.Request && Spicetify.GraphQL?.Definitions?.getTrack) {
+      const res = await Spicetify.GraphQL.Request(
+        Spicetify.GraphQL.Definitions.getTrack,
+        { uri, locale: Spicetify.Locale?.getLocale?.() || 'en' },
+      );
+      const t = res?.data?.trackUnion;
+      if (t?.name) {
+        const artist = t.artists?.items?.[0]?.profile?.name
+          || t.firstArtist?.items?.[0]?.profile?.name
+          || '';
+        return { name: t.name, artist };
+      }
+    }
+  } catch {}
+  return null;
+}
+
 async function llFetchMetadata(uris, kind, onProgress) {
   const target = kind === 'albums' ? llMeta.albums : llMeta.tracks;
   const need = uris.filter((u) => !target[u] && !llMetaInflight.has(u));
   if (need.length === 0) return;
   for (const u of need) llMetaInflight.add(u);
-  const batchSize = kind === 'albums' ? 20 : 50;
-  const endpoint = kind === 'albums' ? 'albums' : 'tracks';
-  try {
-    for (let i = 0; i < need.length; i += batchSize) {
-      const slice = need.slice(i, i + batchSize);
-      const ids = slice.map((u) => u.split(':').pop()).join(',');
-      try {
-        const resp = await Spicetify.CosmosAsync.get(`https://api.spotify.com/v1/${endpoint}?ids=${ids}`);
-        const list = resp?.[endpoint] || [];
-        for (let j = 0; j < slice.length; j++) {
-          const item = list[j];
-          if (!item) continue;
-          target[slice[j]] = {
-            name: item.name || '',
-            artist: (item.artists || []).map((a) => a.name).join(', '),
-          };
-        }
+  const fetcher = kind === 'albums' ? llFetchOneAlbumMeta : llFetchOneTrackMeta;
+  const concurrency = 4;
+  let cursor = 0;
+  let saveAt = 0;
+  async function worker() {
+    while (cursor < need.length) {
+      const i = cursor++;
+      const uri = need[i];
+      const meta = await fetcher(uri);
+      if (meta) target[uri] = meta;
+      saveAt++;
+      if (saveAt >= 10 || i === need.length - 1) {
+        saveAt = 0;
         llSaveMeta();
         onProgress?.();
-      } catch (e) {
-        console.warn('[Listening List] Metadata fetch failed', e);
       }
     }
+  }
+  try {
+    await Promise.all(Array.from({ length: concurrency }, worker));
   } finally {
     for (const u of need) llMetaInflight.delete(u);
+    llSaveMeta();
+    onProgress?.();
   }
 }
 
@@ -1290,7 +1327,8 @@ async function main() {
     !Spicetify?.React ||
     !Spicetify?.ReactJSX?.jsx ||
     !Spicetify?.ReactComponent?.MenuItem ||
-    !Spicetify?.CosmosAsync
+    !Spicetify?.CosmosAsync ||
+    !Spicetify?.GraphQL?.Definitions?.getAlbum
   ) {
     await new Promise((r) => setTimeout(r, 100));
   }
