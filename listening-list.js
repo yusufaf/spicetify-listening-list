@@ -724,21 +724,32 @@ function llOpenModal(tab) {
 
   const tabs = document.createElement('div');
   tabs.className = 'll-tabs';
+  const tabButtons = {};
   for (const [key, label] of [['settings', 'Settings'], ['viewer', 'Viewer'], ['stats', 'Stats']]) {
     const b = document.createElement('button');
     b.className = 'll-tab' + (llActiveTab === key ? ' is-active' : '');
     b.textContent = label;
-    b.addEventListener('click', () => { llActiveTab = key; Spicetify.PopupModal.hide(); llOpenModal(key); });
+    b.addEventListener('click', () => {
+      llActiveTab = key;
+      for (const [k, btn] of Object.entries(tabButtons)) btn.classList.toggle('is-active', k === key);
+      body.innerHTML = '';
+      body.appendChild(renderActive());
+    });
+    tabButtons[key] = b;
     tabs.appendChild(b);
   }
   root.appendChild(tabs);
 
   const body = document.createElement('div');
   body.className = 'll-body';
-  if (llActiveTab === 'settings') body.appendChild(llRenderSettingsTab());
-  else if (llActiveTab === 'viewer') body.appendChild(llRenderViewerTab());
-  else if (llActiveTab === 'stats') body.appendChild(llRenderStatsTab());
+  body.appendChild(renderActive());
   root.appendChild(body);
+
+  function renderActive() {
+    if (llActiveTab === 'viewer') return llRenderViewerTab();
+    if (llActiveTab === 'stats') return llRenderStatsTab();
+    return llRenderSettingsTab();
+  }
 
   Spicetify.PopupModal.display({ title: 'Listening List', content: root, isLarge: true });
 }
