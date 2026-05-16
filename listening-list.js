@@ -475,7 +475,45 @@ function llDecorateAlbumCard(card, anchorHint) {
 //#endregion
 
 //#region Surfaces / Now Playing
-// (populated in Task 11)
+
+let llNowPlayingHandler = null;
+let llNowPlayingUnsub = null;
+
+function llStartNowPlayingSurface() {
+  if (!llConfig.surfaces.nowPlaying) return;
+  llEnsureStyles();
+  const tick = () => llDecorateNowPlaying();
+  tick();
+  llNowPlayingHandler = tick;
+  Spicetify.Player.addEventListener('songchange', llNowPlayingHandler);
+  llNowPlayingUnsub = llSubscribe(tick);
+}
+
+function llStopNowPlayingSurface() {
+  if (llNowPlayingHandler) {
+    Spicetify.Player.removeEventListener('songchange', llNowPlayingHandler);
+    llNowPlayingHandler = null;
+  }
+  llNowPlayingUnsub?.();
+  llNowPlayingUnsub = null;
+  document.querySelectorAll(`.${LL_BADGE_NOWPLAYING_CLASS}`).forEach((el) => el.remove());
+}
+
+function llDecorateNowPlaying() {
+  document.querySelectorAll(`.${LL_BADGE_NOWPLAYING_CLASS}`).forEach((el) => el.remove());
+  const item = Spicetify.Player?.data?.item;
+  if (!item) return;
+  const trackUri = item.uri;
+  const albumUri = item.album?.uri;
+  const listened = (trackUri && llIsTrackListened(trackUri)) || (albumUri && llIsAlbumListened(albumUri));
+  if (!listened) return;
+  const titleEl = document.querySelector('[data-testid="context-item-info-title"], [data-testid="now-playing-widget"] a');
+  if (!titleEl) return;
+  const span = document.createElement('span');
+  span.innerHTML = llBadgeMarkup(LL_BADGE_NOWPLAYING_CLASS);
+  titleEl.appendChild(span.firstElementChild);
+}
+
 //#endregion
 
 //#region Auto-Seed
@@ -563,6 +601,7 @@ async function main() {
   llStartTracklistSurface();
   llStartAlbumHeaderSurface();
   llStartAlbumCardSurface();
+  llStartNowPlayingSurface();
 
   console.log('[Listening List] Booted.');
 }
