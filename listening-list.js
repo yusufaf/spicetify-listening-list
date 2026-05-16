@@ -225,7 +225,57 @@ function llNormalizeUri(input) {
 //#endregion
 
 //#region Marking
-// (populated in Task 6)
+
+function llIsAlbumListened(uri) { return !!llData.albums[uri]; }
+function llIsTrackListened(uri) { return !!llData.tracks[uri]; }
+
+function llMarkOne(uri, source) {
+  if (llData.__readOnly) {
+    Spicetify.showNotification?.('Listening List: data is read-only (schema newer than this version)');
+    return false;
+  }
+  const norm = llNormalizeUri(uri);
+  if (!norm) return false;
+  const rec = { listenedAt: Date.now(), source };
+  if (llIsAlbumUri(norm)) {
+    if (llData.albums[norm]) return false;
+    llData.albums[norm] = rec;
+    return true;
+  }
+  if (llIsTrackUri(norm)) {
+    if (llData.tracks[norm]) return false;
+    llData.tracks[norm] = rec;
+    return true;
+  }
+  return false;
+}
+
+function llUnmarkOne(uri) {
+  const norm = llNormalizeUri(uri);
+  if (!norm) return false;
+  if (llIsAlbumUri(norm) && llData.albums[norm]) { delete llData.albums[norm]; return true; }
+  if (llIsTrackUri(norm) && llData.tracks[norm]) { delete llData.tracks[norm]; return true; }
+  return false;
+}
+
+/**
+ * @param {string[]} uris
+ * @param {"manual"|"auto-playlist"|"auto-play"|"import"} source
+ */
+function llMarkMany(uris, source) {
+  let marked = 0, skipped = 0;
+  for (const u of uris) (llMarkOne(u, source) ? marked++ : skipped++);
+  if (marked > 0) { llSaveData(); llEmit(); }
+  return { marked, skipped };
+}
+
+function llUnmarkMany(uris) {
+  let removed = 0;
+  for (const u of uris) if (llUnmarkOne(u)) removed++;
+  if (removed > 0) { llSaveData(); llEmit(); }
+  return removed;
+}
+
 //#endregion
 
 //#region Surfaces / Tracklist Rows
