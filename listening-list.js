@@ -517,15 +517,22 @@ function llDecorateNowPlaying() {
 //#endregion
 
 //#region Auto-Seed
-// (populated in Task 14)
+
+async function llRunAutoSeed() { throw new Error('Auto-seed not yet implemented (Task 14)'); }
+
 //#endregion
 
 //#region Auto-On-Play
-// (populated in Task 15)
+
+function llRestartAutoOnPlay() { /* implemented in Task 15 */ }
+
 //#endregion
 
 //#region Import / Export
-// (populated in Task 16)
+
+function llExportData() { Spicetify.showNotification?.('Export not yet implemented (Task 16)'); }
+function llPromptImportData() { Spicetify.showNotification?.('Import not yet implemented (Task 16)'); }
+
 //#endregion
 
 //#region Modal
@@ -578,9 +585,196 @@ function llOpenModal(tab) {
 }
 
 function llRenderSettingsTab() {
-  const d = document.createElement('div');
-  d.textContent = 'Settings (Task 13)';
-  return d;
+  const root = document.createElement('div');
+  root.appendChild(llSettingsSurfaces());
+  root.appendChild(llSettingsBadgeStyle());
+  root.appendChild(llSettingsAutoSeed());
+  root.appendChild(llSettingsAutoOnPlay());
+  root.appendChild(llSettingsData());
+  return root;
+}
+
+function llSettingsSurfaces() {
+  const sec = document.createElement('div');
+  sec.className = 'll-section';
+  sec.innerHTML = '<h3>Surfaces</h3>';
+  for (const [key, label] of [
+    ['tracklistRows', 'Tracklist rows'],
+    ['albumHeader', 'Album page header'],
+    ['albumCards', 'Album cards / tiles'],
+    ['nowPlaying', 'Now-playing bar'],
+  ]) {
+    const row = document.createElement('label');
+    row.className = 'll-row';
+    row.innerHTML = `<span>${label}</span>`;
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = !!llConfig.surfaces[key];
+    cb.addEventListener('change', () => {
+      llConfig.surfaces[key] = cb.checked;
+      llSaveConfig();
+      llRestartSurface(key);
+    });
+    row.appendChild(cb);
+    sec.appendChild(row);
+  }
+  return sec;
+}
+
+function llRestartSurface(key) {
+  const startStop = {
+    tracklistRows: [llStartTracklistSurface, llStopTracklistSurface],
+    albumHeader:   [llStartAlbumHeaderSurface, llStopAlbumHeaderSurface],
+    albumCards:    [llStartAlbumCardSurface, llStopAlbumCardSurface],
+    nowPlaying:    [llStartNowPlayingSurface, llStopNowPlayingSurface],
+  }[key];
+  if (!startStop) return;
+  const [start, stop] = startStop;
+  stop();
+  if (llConfig.surfaces[key]) start();
+}
+
+function llSettingsBadgeStyle() {
+  const sec = document.createElement('div');
+  sec.className = 'll-section';
+  sec.innerHTML = '<h3>Badge style</h3>';
+  for (const v of ['checkmark', 'dot', 'text']) {
+    const row = document.createElement('label');
+    row.className = 'll-row';
+    row.innerHTML = `<span>${v.charAt(0).toUpperCase() + v.slice(1)}</span>`;
+    const rb = document.createElement('input');
+    rb.type = 'radio';
+    rb.name = 'll-badge-style';
+    rb.checked = llConfig.badgeStyle === v;
+    rb.addEventListener('change', () => {
+      if (rb.checked) {
+        llConfig.badgeStyle = v;
+        llSaveConfig();
+        llEmit();
+      }
+    });
+    row.appendChild(rb);
+    sec.appendChild(row);
+  }
+  return sec;
+}
+
+function llSettingsAutoSeed() {
+  const sec = document.createElement('div');
+  sec.className = 'll-section';
+  sec.innerHTML = '<h3>Auto-seed from playlists</h3>';
+  const enabled = document.createElement('label');
+  enabled.className = 'll-row';
+  enabled.innerHTML = '<span>Enabled</span>';
+  const cb = document.createElement('input');
+  cb.type = 'checkbox';
+  cb.checked = llConfig.autoSeed.enabled;
+  cb.addEventListener('change', () => { llConfig.autoSeed.enabled = cb.checked; llSaveConfig(); });
+  enabled.appendChild(cb);
+  sec.appendChild(enabled);
+
+  const thr = document.createElement('label');
+  thr.className = 'll-row';
+  thr.innerHTML = '<span>Min tracks per album</span>';
+  const n = document.createElement('input');
+  n.type = 'number'; n.min = '1'; n.max = '20'; n.value = String(llConfig.autoSeed.minTracksPerAlbum);
+  n.addEventListener('change', () => {
+    const v = Math.max(1, Math.min(20, Number(n.value) || 3));
+    llConfig.autoSeed.minTracksPerAlbum = v;
+    llSaveConfig();
+  });
+  thr.appendChild(n);
+  sec.appendChild(thr);
+
+  const runRow = document.createElement('div');
+  runRow.className = 'll-row';
+  const last = llConfig.autoSeed.lastSeededAt ? new Date(llConfig.autoSeed.lastSeededAt).toLocaleString() : 'never';
+  runRow.innerHTML = `<span>Last seeded: ${last}</span>`;
+  const btn = document.createElement('button');
+  btn.className = 'll-btn';
+  btn.textContent = 'Seed now';
+  btn.addEventListener('click', async () => {
+    btn.disabled = true; btn.textContent = 'Seeding...';
+    try {
+      const summary = await llRunAutoSeed();
+      Spicetify.showNotification?.(`Seeded ${summary.markedAlbums} albums from ${summary.playlistsScanned} playlists`);
+    } catch (e) {
+      console.error('[Listening List] Auto-seed failed', e);
+      Spicetify.showNotification?.('Auto-seed failed (see console)');
+    } finally {
+      btn.disabled = false; btn.textContent = 'Seed now';
+    }
+  });
+  runRow.appendChild(btn);
+  sec.appendChild(runRow);
+  return sec;
+}
+
+function llSettingsAutoOnPlay() {
+  const sec = document.createElement('div');
+  sec.className = 'll-section';
+  sec.innerHTML = '<h3>Auto-mark on play</h3>';
+
+  const en = document.createElement('label');
+  en.className = 'll-row';
+  en.innerHTML = '<span>Enabled</span>';
+  const cb = document.createElement('input');
+  cb.type = 'checkbox';
+  cb.checked = llConfig.autoOnPlay.enabled;
+  cb.addEventListener('change', () => {
+    llConfig.autoOnPlay.enabled = cb.checked;
+    llSaveConfig();
+    llRestartAutoOnPlay();
+  });
+  en.appendChild(cb);
+  sec.appendChild(en);
+
+  const thr = document.createElement('label');
+  thr.className = 'll-row';
+  thr.innerHTML = `<span>Threshold: <span id="ll-aop-val">${llConfig.autoOnPlay.percentThreshold}</span>%</span>`;
+  const r = document.createElement('input');
+  r.type = 'range'; r.min = '0'; r.max = '100'; r.value = String(llConfig.autoOnPlay.percentThreshold);
+  r.addEventListener('input', () => {
+    const v = Number(r.value);
+    llConfig.autoOnPlay.percentThreshold = v;
+    const val = thr.querySelector('#ll-aop-val');
+    if (val) val.textContent = String(v);
+  });
+  r.addEventListener('change', () => llSaveConfig());
+  thr.appendChild(r);
+  sec.appendChild(thr);
+  return sec;
+}
+
+function llSettingsData() {
+  const sec = document.createElement('div');
+  sec.className = 'll-section';
+  sec.innerHTML = '<h3>Data</h3>';
+  const row = document.createElement('div');
+  row.className = 'll-row';
+
+  const exp = document.createElement('button');
+  exp.className = 'll-btn ll-btn--ghost';
+  exp.textContent = 'Export JSON';
+  exp.addEventListener('click', llExportData);
+
+  const imp = document.createElement('button');
+  imp.className = 'll-btn ll-btn--ghost';
+  imp.textContent = 'Import JSON';
+  imp.addEventListener('click', llPromptImportData);
+
+  const clr = document.createElement('button');
+  clr.className = 'll-btn ll-btn--ghost';
+  clr.textContent = 'Clear all';
+  clr.addEventListener('click', () => {
+    if (!confirm('Clear all listened data? This cannot be undone.')) return;
+    llData = llEmptyData(); llSaveData(); llEmit();
+    Spicetify.showNotification?.('Listening List cleared');
+  });
+
+  row.append(exp, imp, clr);
+  sec.appendChild(row);
+  return sec;
 }
 function llRenderViewerTab() {
   const d = document.createElement('div');
