@@ -113,7 +113,84 @@ function llSubscribe(fn) {
 //#endregion
 
 //#region Storage
-// (populated in Task 4)
+
+function llLoadData() {
+  const raw = Spicetify.LocalStorage.get(LL_DATA_KEY);
+  if (!raw) return llEmptyData();
+  try {
+    const parsed = JSON.parse(raw);
+    return llMigrateData(parsed);
+  } catch (e) {
+    console.error('[Listening List] Failed to parse data; using empty. Raw:', raw, e);
+    return llEmptyData();
+  }
+}
+
+function llSaveData() {
+  try {
+    Spicetify.LocalStorage.set(LL_DATA_KEY, JSON.stringify(llData));
+  } catch (e) {
+    console.error('[Listening List] Failed to save data', e);
+    Spicetify.showNotification?.('Listening List: failed to save data');
+  }
+}
+
+function llMigrateData(parsed) {
+  if (!parsed || typeof parsed !== 'object') return llEmptyData();
+  const v = parsed.schemaVersion ?? 0;
+  if (v > LL_DATA_SCHEMA_VERSION) {
+    console.warn(`[Listening List] Data schema v${v} newer than supported v${LL_DATA_SCHEMA_VERSION}; refusing to write.`);
+    return { ...llEmptyData(), schemaVersion: v, __readOnly: true };
+  }
+  return {
+    schemaVersion: LL_DATA_SCHEMA_VERSION,
+    albums: parsed.albums && typeof parsed.albums === 'object' ? parsed.albums : {},
+    tracks: parsed.tracks && typeof parsed.tracks === 'object' ? parsed.tracks : {},
+  };
+}
+
+function llLoadConfig() {
+  const raw = Spicetify.LocalStorage.get(LL_CONFIG_KEY);
+  if (!raw) return JSON.parse(JSON.stringify(LL_DEFAULT_CONFIG));
+  try {
+    const parsed = JSON.parse(raw);
+    return llMigrateConfig(parsed);
+  } catch (e) {
+    console.error('[Listening List] Failed to parse config; using defaults. Raw:', raw, e);
+    return JSON.parse(JSON.stringify(LL_DEFAULT_CONFIG));
+  }
+}
+
+function llSaveConfig() {
+  try {
+    Spicetify.LocalStorage.set(LL_CONFIG_KEY, JSON.stringify(llConfig));
+  } catch (e) {
+    console.error('[Listening List] Failed to save config', e);
+  }
+}
+
+function llMigrateConfig(parsed) {
+  if (!parsed || typeof parsed !== 'object') return JSON.parse(JSON.stringify(LL_DEFAULT_CONFIG));
+  return llDeepMerge(LL_DEFAULT_CONFIG, parsed, { schemaVersion: LL_CONFIG_SCHEMA_VERSION });
+}
+
+function llDeepMerge(base, override, ...extras) {
+  const out = Array.isArray(base) ? base.slice() : { ...base };
+  if (override && typeof override === 'object') {
+    for (const k of Object.keys(override)) {
+      const bv = out[k];
+      const ov = override[k];
+      if (bv && typeof bv === 'object' && !Array.isArray(bv) && ov && typeof ov === 'object' && !Array.isArray(ov)) {
+        out[k] = llDeepMerge(bv, ov);
+      } else if (ov !== undefined) {
+        out[k] = ov;
+      }
+    }
+  }
+  for (const extra of extras) Object.assign(out, extra);
+  return out;
+}
+
 //#endregion
 
 //#region URI Helpers
@@ -176,6 +253,10 @@ async function main() {
     return;
   }
   window.__listeningListActive = true;
+
+  llData = llLoadData();
+  llConfig = llLoadConfig();
+  llSaveConfig();
 
   console.log('[Listening List] Booted.');
 }
