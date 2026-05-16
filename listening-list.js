@@ -311,7 +311,47 @@ function llUnmarkMany(uris) {
 //#endregion
 
 //#region Context Menu
-// (populated in Task 7)
+
+function llShouldShowMark(uris) {
+  return uris.some((u) => {
+    const norm = llNormalizeUri(u);
+    if (!norm) return false;
+    return (llIsAlbumUri(norm) && !llIsAlbumListened(norm))
+        || (llIsTrackUri(norm) && !llIsTrackListened(norm));
+  });
+}
+
+function llShouldShowUnmark(uris) {
+  return uris.some((u) => {
+    const norm = llNormalizeUri(u);
+    if (!norm) return false;
+    return (llIsAlbumUri(norm) && llIsAlbumListened(norm))
+        || (llIsTrackUri(norm) && llIsTrackListened(norm));
+  });
+}
+
+function llRegisterContextMenu() {
+  const markItem = new Spicetify.ContextMenu.Item(
+    'Mark as listened',
+    (uris) => {
+      const { marked, skipped } = llMarkMany(uris, 'manual');
+      Spicetify.showNotification?.(`Marked ${marked} as listened${skipped ? ` (${skipped} already)` : ''}`);
+    },
+    llShouldShowMark,
+    `<svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="${LL_CHECK_SVG_PATH}"/></svg>`,
+  );
+  const unmarkItem = new Spicetify.ContextMenu.Item(
+    'Unmark as listened',
+    (uris) => {
+      const removed = llUnmarkMany(uris);
+      Spicetify.showNotification?.(`Unmarked ${removed}`);
+    },
+    llShouldShowUnmark,
+  );
+  markItem.register();
+  unmarkItem.register();
+}
+
 //#endregion
 
 //#region Profile Menu
@@ -334,6 +374,8 @@ async function main() {
   llData = llLoadData();
   llConfig = llLoadConfig();
   llSaveConfig();
+
+  llRegisterContextMenu();
 
   console.log('[Listening List] Booted.');
 }
