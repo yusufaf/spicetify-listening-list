@@ -1061,9 +1061,55 @@ function llRenderViewerTable() {
   return wrap;
 }
 function llRenderStatsTab() {
-  const d = document.createElement('div');
-  d.textContent = 'Stats (Task 18)';
-  return d;
+  const root = document.createElement('div');
+  const albums = Object.values(llData.albums);
+  const tracks = Object.values(llData.tracks);
+  const now = Date.now();
+  const monthAgo = now - 30 * 24 * 3600 * 1000;
+  const albumsThisMonth = albums.filter((r) => r.listenedAt >= monthAgo).length;
+  const tracksThisMonth = tracks.filter((r) => r.listenedAt >= monthAgo).length;
+
+  const bySource = (rows) => rows.reduce((acc, r) => { acc[r.source] = (acc[r.source] || 0) + 1; return acc; }, {});
+  const a = bySource(albums);
+  const t = bySource(tracks);
+
+  const earliest = [...albums, ...tracks].reduce((min, r) => r.listenedAt < min ? r.listenedAt : min, Infinity);
+  const latest = [...albums, ...tracks].reduce((max, r) => r.listenedAt > max ? r.listenedAt : max, 0);
+
+  const fmt = (n) => Number.isFinite(n) && n > 0 ? new Date(n).toLocaleDateString() : '—';
+
+  root.innerHTML = `
+    <div class="ll-section">
+      <h3>Totals</h3>
+      <div class="ll-row"><span>Albums listened</span><span>${albums.length}</span></div>
+      <div class="ll-row"><span>Tracks listened</span><span>${tracks.length}</span></div>
+    </div>
+    <div class="ll-section">
+      <h3>Last 30 days</h3>
+      <div class="ll-row"><span>Albums</span><span>${albumsThisMonth}</span></div>
+      <div class="ll-row"><span>Tracks</span><span>${tracksThisMonth}</span></div>
+    </div>
+    <div class="ll-section">
+      <h3>By source — albums</h3>
+      <div class="ll-row"><span>Manual</span><span>${a.manual || 0}</span></div>
+      <div class="ll-row"><span>Auto-playlist</span><span>${a['auto-playlist'] || 0}</span></div>
+      <div class="ll-row"><span>Auto-play</span><span>${a['auto-play'] || 0}</span></div>
+      <div class="ll-row"><span>Import</span><span>${a.import || 0}</span></div>
+    </div>
+    <div class="ll-section">
+      <h3>By source — tracks</h3>
+      <div class="ll-row"><span>Manual</span><span>${t.manual || 0}</span></div>
+      <div class="ll-row"><span>Auto-playlist</span><span>${t['auto-playlist'] || 0}</span></div>
+      <div class="ll-row"><span>Auto-play</span><span>${t['auto-play'] || 0}</span></div>
+      <div class="ll-row"><span>Import</span><span>${t.import || 0}</span></div>
+    </div>
+    <div class="ll-section">
+      <h3>Range</h3>
+      <div class="ll-row"><span>Earliest</span><span>${fmt(earliest)}</span></div>
+      <div class="ll-row"><span>Latest</span><span>${fmt(latest)}</span></div>
+    </div>
+  `;
+  return root;
 }
 
 //#endregion
