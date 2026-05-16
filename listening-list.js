@@ -86,6 +86,9 @@ const LL_GEAR_SVG_PATH = 'M9.405 1.05c-.413-1.4-2.397-1.4-2.81 0l-.1.34a1.464 1.
 /** Export schema version (matches data schema for now) */
 const LL_EXPORT_SCHEMA_VERSION = 1;
 
+/** Metadata cache LocalStorage key (name/artist by URI) */
+const LL_META_KEY = 'listening-list-meta';
+
 const LL_BASE_CSS = `
   .ll-badge { display: inline-flex; align-items: center; justify-content: center; color: var(--spice-button, #1ed760); pointer-events: none; }
   .ll-badge--tracklist { width: 14px; height: 14px; margin-right: 6px; vertical-align: middle; }
@@ -121,6 +124,12 @@ let llData = llEmptyData();
 
 /** @type {ListenedConfig} */
 let llConfig = JSON.parse(JSON.stringify(LL_DEFAULT_CONFIG));
+
+/** Metadata cache: { albums: { uri: { name, artist } }, tracks: { uri: { name, artist } } } */
+let llMeta = { albums: {}, tracks: {} };
+
+/** In-flight fetches to avoid duplicate requests */
+const llMetaInflight = new Set();
 
 /** Internal event bus for "data changed" — subscribers re-render their surfaces. */
 const llListeners = new Set();
@@ -198,6 +207,61 @@ function llSaveConfig() {
 function llMigrateConfig(parsed) {
   if (!parsed || typeof parsed !== 'object') return JSON.parse(JSON.stringify(LL_DEFAULT_CONFIG));
   return llDeepMerge(LL_DEFAULT_CONFIG, parsed, { schemaVersion: LL_CONFIG_SCHEMA_VERSION });
+}
+
+function llLoadMeta() {
+  const raw = Spicetify.LocalStorage.get(LL_META_KEY);
+  if (!raw) return { albums: {}, tracks: {} };
+  try {
+    const parsed = JSON.parse(raw);
+    return {
+      albums: parsed.albums && typeof parsed.albums === 'object' ? parsed.albums : {},
+      tracks: parsed.tracks && typeof parsed.tracks === 'object' ? parsed.tracks : {},
+    };
+  } catch {
+    return { albums: {}, tracks: {} };
+  }
+}
+
+function llSaveMeta() {
+  try {
+    Spicetify.LocalStorage.set(LL_META_KEY, JSON.stringify(llMeta));
+  } catch (e) {
+    console.error('[Listening List] Failed to save meta', e);
+  }
+}
+
+async function llFetchMetadata(uris, kind, onProgress) {
+  const target = kind === 'albums' ? llMeta.albums : llMeta.tracks;
+  const need = uris.filter((u) => !target[u] && !llMetaInflight.has(u));
+  if (need.length === 0) return;
+  for (const u of need) llMetaInflight.add(u);
+  const batchSize = kind === 'albums' ? 20 : 50;
+  const endpoint = kind === 'albums' ? 'albums' : 'tracks';
+  try {
+    for (let i = 0; i < need.length; i += batchSize) {
+      const slice = need.slice(i, i + batchSize);
+      const ids = slice.map((u) => u.split(':').pop()).join(',');
+      try {
+        const resp = await Spicetify.CosmosAsync.get(`https://api.spotify.com/v1/${endpoint}?ids=${ids}`);
+        const list = resp?.[endpoint] || [];
+        for (let j = 0; j < slice.length; j++) {
+          const item = list[j];
+          if (!item) continue;
+          target[slice[j]] = {
+            name: item.name || '',
+            artist: (item.artists || []).map((a) => a.name).join(', '),
+          };
+        }
+        llSaveMeta();
+        onProgress?.();
+      } catch (e) {
+        console.warn('[Listening List] Metadata fetch failed', e);
+      }
+    }
+  } finally {
+    for (const u of need) llMetaInflight.delete(u);
+  }
 }
 
 function llDeepMerge(base, override, ...extras) {
@@ -963,7 +1027,7 @@ function llRenderViewerTab() {
 
   const filter = document.createElement('input');
   filter.type = 'text';
-  filter.placeholder = 'Filter by URI';
+  filter.placeholder = 'Filter by name, artist, or URI';
   filter.value = llViewerState.filter;
   filter.style.width = '100%';
   filter.style.margin = '8px 0';
@@ -996,12 +1060,12 @@ function llRenderViewerTab() {
 function llRenderViewerTable() {
   const source = llViewerState.kind === 'albums' ? llData.albums : llData.tracks;
   const f = llViewerState.filter.trim().toLowerCase();
-  let entries = Object.entries(source).filter(([uri]) => !f || uri.toLowerCase().includes(f));
-  entries.sort((a, b) => {
-    const aKey = llViewerState.sortKey === 'uri' ? a[0] : a[1].listenedAt;
-    const bKey = llViewerState.sortKey === 'uri' ? b[0] : b[1].listenedAt;
-    const cmp = aKey > bKey ? 1 : aKey < bKey ? -1 : 0;
-    return llViewerState.sortDir === 'asc' ? cmp : -cmp;
+  const metaForFilter = llViewerState.kind === 'albums' ? llMeta.albums : llMeta.tracks;
+  let entries = Object.entries(source).filter(([uri]) => {
+    if (!f) return true;
+    if (uri.toLowerCase().includes(f)) return true;
+    const m = metaForFilter[uri];
+    return !!m && ((m.name || '').toLowerCase().includes(f) || (m.artist || '').toLowerCase().includes(f));
   });
 
   const wrap = document.createElement('div');
@@ -1013,10 +1077,32 @@ function llRenderViewerTable() {
     return wrap;
   }
 
+  const kind = llViewerState.kind;
+  const metaSide = kind === 'albums' ? llMeta.albums : llMeta.tracks;
+
+  // Re-sort with name support if requested
+  entries.sort((a, b) => {
+    let aKey, bKey;
+    if (llViewerState.sortKey === 'name') {
+      aKey = (metaSide[a[0]]?.name || '').toLowerCase();
+      bKey = (metaSide[b[0]]?.name || '').toLowerCase();
+    } else if (llViewerState.sortKey === 'artist') {
+      aKey = (metaSide[a[0]]?.artist || '').toLowerCase();
+      bKey = (metaSide[b[0]]?.artist || '').toLowerCase();
+    } else {
+      aKey = a[1].listenedAt;
+      bKey = b[1].listenedAt;
+    }
+    const cmp = aKey > bKey ? 1 : aKey < bKey ? -1 : 0;
+    return llViewerState.sortDir === 'asc' ? cmp : -cmp;
+  });
+
   const table = document.createElement('table');
   const thead = document.createElement('thead');
+  const titleLabel = kind === 'albums' ? 'Album' : 'Track';
   thead.innerHTML = `<tr>
-    <th data-sort="uri">URI</th>
+    <th data-sort="name">${titleLabel}</th>
+    <th data-sort="artist">Artist</th>
     <th data-sort="listenedAt">Listened</th>
     <th>Source</th>
     <th></th>
@@ -1028,23 +1114,26 @@ function llRenderViewerTable() {
         llViewerState.sortDir = llViewerState.sortDir === 'asc' ? 'desc' : 'asc';
       } else {
         llViewerState.sortKey = key;
-        llViewerState.sortDir = 'desc';
+        llViewerState.sortDir = key === 'listenedAt' ? 'desc' : 'asc';
       }
-      const parent = wrap.parentElement;
       wrap.replaceWith(llRenderViewerTable());
-      void parent;
     });
   });
   table.appendChild(thead);
 
   const tbody = document.createElement('tbody');
   const max = 500;
-  for (const [uri, rec] of entries.slice(0, max)) {
+  const visible = entries.slice(0, max);
+  for (const [uri, rec] of visible) {
     const tr = document.createElement('tr');
     const id = uri.split(':').pop();
-    const path = llViewerState.kind === 'albums' ? `/album/${id}` : `/track/${id}`;
+    const path = kind === 'albums' ? `/album/${id}` : `/track/${id}`;
+    const m = metaSide[uri];
+    const name = m?.name || '…';
+    const artist = m?.artist || '';
     tr.innerHTML = `
-      <td><a href="${path}" style="color:var(--spice-text)">${uri}</a></td>
+      <td><a href="${path}" style="color:var(--spice-text)" title="${uri}">${name}</a></td>
+      <td style="opacity:.8">${artist}</td>
       <td>${new Date(rec.listenedAt).toLocaleDateString()}</td>
       <td>${rec.source}</td>
       <td><button class="ll-btn ll-btn--ghost" data-act="unmark">Unmark</button></td>
@@ -1062,6 +1151,13 @@ function llRenderViewerTable() {
   }
   table.appendChild(tbody);
   wrap.appendChild(table);
+
+  const missing = visible.map(([u]) => u).filter((u) => !metaSide[u]);
+  if (missing.length > 0) {
+    llFetchMetadata(missing, kind, () => {
+      if (wrap.isConnected) wrap.replaceWith(llRenderViewerTable());
+    });
+  }
 
   if (entries.length > max) {
     const more = document.createElement('p');
@@ -1193,7 +1289,8 @@ async function main() {
     !Spicetify?.Player ||
     !Spicetify?.React ||
     !Spicetify?.ReactJSX?.jsx ||
-    !Spicetify?.ReactComponent?.MenuItem
+    !Spicetify?.ReactComponent?.MenuItem ||
+    !Spicetify?.CosmosAsync
   ) {
     await new Promise((r) => setTimeout(r, 100));
   }
@@ -1207,6 +1304,7 @@ async function main() {
   llData = llLoadData();
   llConfig = llLoadConfig();
   llSaveConfig();
+  llMeta = llLoadMeta();
 
   llRegisterContextMenu();
   llStartTracklistSurface();
