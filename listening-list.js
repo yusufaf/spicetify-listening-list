@@ -235,7 +235,10 @@ async function llFetchOneAlbumMeta(uri) {
   const id = uri.split(':').pop();
   try {
     const res = await Spicetify.CosmosAsync.get(`wg://album/v1/album-app/album/${id}/desktop`);
-    if (res?.name) return { name: res.name, artist: res.artists?.[0]?.name || '' };
+    if (res?.name) {
+      const a0 = res.artists?.[0];
+      return { name: res.name, artist: a0?.name || '', artistUri: a0?.uri || '' };
+    }
   } catch {}
   try {
     if (Spicetify.GraphQL?.Request && Spicetify.GraphQL?.Definitions?.getAlbum) {
@@ -244,7 +247,10 @@ async function llFetchOneAlbumMeta(uri) {
         { uri, locale: Spicetify.Locale?.getLocale?.() || 'en', limit: 1, offset: 0 },
       );
       const a = res?.data?.albumUnion;
-      if (a?.name) return { name: a.name, artist: a.artists?.items?.[0]?.profile?.name || '' };
+      if (a?.name) {
+        const ar = a.artists?.items?.[0];
+        return { name: a.name, artist: ar?.profile?.name || '', artistUri: ar?.uri || '' };
+      }
     }
   } catch {}
   return null;
@@ -259,10 +265,8 @@ async function llFetchOneTrackMeta(uri) {
       );
       const t = res?.data?.trackUnion;
       if (t?.name) {
-        const artist = t.artists?.items?.[0]?.profile?.name
-          || t.firstArtist?.items?.[0]?.profile?.name
-          || '';
-        return { name: t.name, artist };
+        const ar = t.artists?.items?.[0] || t.firstArtist?.items?.[0];
+        return { name: t.name, artist: ar?.profile?.name || '', artistUri: ar?.uri || '' };
       }
     }
   } catch {}
@@ -271,9 +275,8 @@ async function llFetchOneTrackMeta(uri) {
 
 async function llFetchMetadata(uris, kind, onItem, onDone) {
   const target = kind === 'albums' ? llMeta.albums : llMeta.tracks;
-  const need = uris.filter((u) => !target[u] && !llMetaInflight.has(u));
+  const need = uris.filter((u) => !target[u]);
   if (need.length === 0) { onDone?.(0); return; }
-  for (const u of need) llMetaInflight.add(u);
   const fetcher = kind === 'albums' ? llFetchOneAlbumMeta : llFetchOneTrackMeta;
   const concurrency = 4;
   let cursor = 0;
@@ -282,6 +285,7 @@ async function llFetchMetadata(uris, kind, onItem, onDone) {
   async function worker() {
     while (cursor < need.length) {
       const uri = need[cursor++];
+      if (target[uri]) { completed++; try { onItem?.(uri, target[uri], completed, need.length); } catch {} continue; }
       const meta = await fetcher(uri);
       if (meta) target[uri] = meta;
       completed++;
@@ -293,7 +297,6 @@ async function llFetchMetadata(uris, kind, onItem, onDone) {
   try {
     await Promise.all(Array.from({ length: concurrency }, worker));
   } finally {
-    for (const u of need) llMetaInflight.delete(u);
     llSaveMeta();
     try { onDone?.(need.length); } catch (e) { console.warn('[Listening List] onDone error', e); }
   }
@@ -1135,15 +1138,18 @@ function llRenderViewerTable() {
   const table = document.createElement('table');
   const thead = document.createElement('thead');
   const titleLabel = kind === 'albums' ? 'Album' : 'Track';
+  const arrow = (key) => llViewerState.sortKey === key ? (llViewerState.sortDir === 'asc' ? ' ▲' : ' ▼') : '';
   thead.innerHTML = `<tr>
-    <th data-sort="name">${titleLabel}</th>
-    <th data-sort="artist">Artist</th>
-    <th data-sort="listenedAt">Listened</th>
+    <th data-sort="name">${titleLabel}<span class="ll-sort">${arrow('name')}</span></th>
+    <th data-sort="artist">Artist<span class="ll-sort">${arrow('artist')}</span></th>
+    <th data-sort="listenedAt">Listened<span class="ll-sort">${arrow('listenedAt')}</span></th>
     <th>Source</th>
     <th></th>
   </tr>`;
   thead.querySelectorAll('th[data-sort]').forEach((th) => {
-    th.addEventListener('click', () => {
+    th.style.cursor = 'pointer';
+    th.addEventListener('click', (e) => {
+      e.stopPropagation();
       const key = th.getAttribute('data-sort');
       if (llViewerState.sortKey === key) {
         llViewerState.sortDir = llViewerState.sortDir === 'asc' ? 'desc' : 'asc';
@@ -1159,27 +1165,47 @@ function llRenderViewerTable() {
   const tbody = document.createElement('tbody');
   const max = 500;
   const visible = entries.slice(0, max);
+  const escHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const buildArtistCell = (m) => {
+    if (!m) return '';
+    const artistName = escHtml(m.artist || '');
+    if (m.artistUri && m.artistUri.startsWith('spotify:artist:')) {
+      const aid = m.artistUri.split(':').pop();
+      return `<a href="/artist/${aid}" class="ll-artist-link" data-artist-path="/artist/${aid}" style="color:inherit; text-decoration:none;">${artistName}</a>`;
+    }
+    return artistName;
+  };
   for (const [uri, rec] of visible) {
     const tr = document.createElement('tr');
     tr.dataset.uri = uri;
     const id = uri.split(':').pop();
     const path = kind === 'albums' ? `/album/${id}` : `/track/${id}`;
     const m = metaSide[uri];
-    const nameCell = m?.name || '<span style="opacity:.4">…</span>';
-    const artist = m?.artist || '';
+    const nameCell = m?.name ? escHtml(m.name) : '<span style="opacity:.4">…</span>';
     tr.innerHTML = `
-      <td class="ll-name-cell"><a href="${path}" style="color:var(--spice-text)" title="${uri}">${nameCell}</a></td>
-      <td class="ll-artist-cell" style="opacity:.8">${artist}</td>
+      <td class="ll-name-cell"><a href="${path}" style="color:var(--spice-text)" title="${escHtml(uri)}">${nameCell}</a></td>
+      <td class="ll-artist-cell" style="opacity:.85">${buildArtistCell(m)}</td>
       <td>${new Date(rec.listenedAt).toLocaleDateString()}</td>
       <td>${rec.source}</td>
       <td><button class="ll-btn ll-btn--ghost" data-act="unmark">Unmark</button></td>
     `;
-    tr.querySelector('a').addEventListener('click', (e) => {
+    tr.querySelector('.ll-name-cell a').addEventListener('click', (e) => {
       e.preventDefault();
+      e.stopPropagation();
       Spicetify.Platform?.History?.push(path);
       Spicetify.PopupModal.hide();
     });
-    tr.querySelector('button[data-act="unmark"]').addEventListener('click', () => {
+    const artistLink = tr.querySelector('.ll-artist-link');
+    if (artistLink) {
+      artistLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        Spicetify.Platform?.History?.push(artistLink.getAttribute('data-artist-path'));
+        Spicetify.PopupModal.hide();
+      });
+    }
+    tr.querySelector('button[data-act="unmark"]').addEventListener('click', (e) => {
+      e.stopPropagation();
       llUnmarkMany([uri]);
       tr.remove();
     });
@@ -1209,7 +1235,18 @@ function llRenderViewerTable() {
       const a = tr.querySelector('.ll-name-cell a');
       if (a) a.textContent = m.name || a.textContent;
       const art = tr.querySelector('.ll-artist-cell');
-      if (art) art.textContent = m.artist || '';
+      if (art) {
+        art.innerHTML = buildArtistCell(m);
+        const newLink = art.querySelector('.ll-artist-link');
+        if (newLink) {
+          newLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            Spicetify.Platform?.History?.push(newLink.getAttribute('data-artist-path'));
+            Spicetify.PopupModal.hide();
+          });
+        }
+      }
     };
     llFetchMetadata(
       missing,
