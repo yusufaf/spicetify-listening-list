@@ -613,8 +613,84 @@ function llRestartAutoOnPlay() {
 
 //#region Import / Export
 
-function llExportData() { Spicetify.showNotification?.('Export not yet implemented (Task 16)'); }
-function llPromptImportData() { Spicetify.showNotification?.('Import not yet implemented (Task 16)'); }
+function llExportData() {
+  const payload = {
+    exportSchemaVersion: LL_EXPORT_SCHEMA_VERSION,
+    exportedAt: new Date().toISOString(),
+    data: llData,
+    config: llConfig,
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  a.download = `listening-list-export-${date}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  Spicetify.showNotification?.('Exported listening list');
+}
+
+function llPromptImportData() {
+  const wrap = document.createElement('div');
+  wrap.innerHTML = `
+    <p style="margin-top:0">Paste exported JSON or choose a file. Existing entries are kept; new entries are merged (earliest <code>listenedAt</code> wins per URI).</p>
+    <input type="file" accept="application/json" id="ll-import-file" />
+    <textarea id="ll-import-text" rows="10" style="width:100%; margin-top:8px; background:var(--spice-card,#222); color:var(--spice-text); border:1px solid var(--spice-subtext,#555); border-radius:4px; padding:6px;"></textarea>
+    <div style="margin-top:8px; display:flex; gap:8px;">
+      <button class="ll-btn" id="ll-import-go">Import</button>
+      <button class="ll-btn ll-btn--ghost" id="ll-import-cancel">Cancel</button>
+    </div>
+  `;
+  wrap.querySelector('#ll-import-file').addEventListener('change', async (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    wrap.querySelector('#ll-import-text').value = await f.text();
+  });
+  wrap.querySelector('#ll-import-cancel').addEventListener('click', () => Spicetify.PopupModal.hide());
+  wrap.querySelector('#ll-import-go').addEventListener('click', () => {
+    const raw = wrap.querySelector('#ll-import-text').value;
+    try {
+      const parsed = JSON.parse(raw);
+      const result = llMergeImport(parsed);
+      Spicetify.showNotification?.(`Imported ${result.addedAlbums} albums, ${result.addedTracks} tracks`);
+      Spicetify.PopupModal.hide();
+    } catch (e) {
+      console.error('[Listening List] Import failed', e);
+      Spicetify.showNotification?.('Import failed (see console)');
+    }
+  });
+  Spicetify.PopupModal.display({ title: 'Import Listening List', content: wrap, isLarge: true });
+}
+
+function llMergeImport(payload) {
+  if (!payload || typeof payload !== 'object') throw new Error('Not an object');
+  const incoming = payload.data || payload;
+  if (!incoming.albums || !incoming.tracks) throw new Error('Missing albums/tracks');
+  if (payload.exportSchemaVersion && payload.exportSchemaVersion > LL_EXPORT_SCHEMA_VERSION) {
+    throw new Error(`Export schema v${payload.exportSchemaVersion} newer than supported v${LL_EXPORT_SCHEMA_VERSION}`);
+  }
+  let addedAlbums = 0, addedTracks = 0;
+  const mergeSide = (target, source, counterKey) => {
+    for (const [uri, rec] of Object.entries(source)) {
+      if (!rec || typeof rec.listenedAt !== 'number') continue;
+      const incomingRec = { listenedAt: rec.listenedAt, source: rec.source === 'manual' || rec.source === 'auto-playlist' || rec.source === 'auto-play' || rec.source === 'import' ? rec.source : 'import' };
+      if (!target[uri]) {
+        target[uri] = incomingRec;
+        if (counterKey === 'a') addedAlbums++; else addedTracks++;
+      } else if (incomingRec.listenedAt < target[uri].listenedAt) {
+        target[uri] = incomingRec;
+      }
+    }
+  };
+  mergeSide(llData.albums, incoming.albums, 'a');
+  mergeSide(llData.tracks, incoming.tracks, 't');
+  llSaveData();
+  llEmit();
+  return { addedAlbums, addedTracks };
+}
 
 //#endregion
 
