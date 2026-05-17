@@ -457,8 +457,7 @@ function llDecorateTracklistRow(row) {
                    || (!!ambientAlbum && llIsAlbumListened(ambientAlbum));
   if (listened) {
     if (!existing) {
-      const titleSlot = row.querySelector('.main-trackList-rowMainContent, .main-trackList-rowTitle, [data-testid="tracklist-row-title"]')
-        || row.firstElementChild;
+      const titleSlot = row.querySelector('.main-trackList-rowMainContentTitle, [data-testid="internal-track-link"], .main-trackList-rowTitle, [data-testid="tracklist-row-title"]');
       if (titleSlot) {
         const wrap = document.createElement('span');
         wrap.innerHTML = llBadgeMarkup(LL_BADGE_TRACKLIST_CLASS);
@@ -616,7 +615,7 @@ function llDecorateNowPlaying() {
   const albumUri = item.album?.uri;
   const listened = (trackUri && llIsTrackListened(trackUri)) || (albumUri && llIsAlbumListened(albumUri));
   if (!listened) return;
-  const titleEl = document.querySelector('[data-testid="context-item-info-title"] a, [data-testid="context-item-info-title"], [data-testid="now-playing-widget"] a[href^="/album/"], [data-testid="now-playing-widget"] a[href^="/track/"], [data-testid="now-playing-widget"] a');
+  const titleEl = document.querySelector('.main-trackInfo-name a, .main-trackInfo-name, [data-testid="context-item-info-title"] a, [data-testid="context-item-info-title"], [data-testid="now-playing-widget"] a[href^="/album/"], [data-testid="now-playing-widget"] a[href^="/track/"], [data-testid="now-playing-widget"] a');
   if (!titleEl) return;
   const span = document.createElement('span');
   span.innerHTML = llBadgeMarkup(LL_BADGE_NOWPLAYING_CLASS);
