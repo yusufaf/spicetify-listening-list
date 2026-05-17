@@ -440,12 +440,11 @@ function llStopTracklistSurface() {
 }
 
 function llDecorateAllTracklistRows() {
-  const rows = document.querySelectorAll('[data-testid="tracklist-row"]');
+  const rows = document.querySelectorAll('.main-trackList-trackListRow, [data-testid="tracklist-row"]');
   rows.forEach(llDecorateTracklistRow);
 }
 
 function llDecorateTracklistRow(row) {
-  if (row.dataset.llProcessed === '1' && !llRowNeedsRefresh(row)) return;
   const anchors = row.querySelectorAll('a[href^="/track/"], a[href^="/album/"]');
   let uri = null;
   for (const a of anchors) {
@@ -456,17 +455,17 @@ function llDecorateTracklistRow(row) {
   const listened = uri && (llIsAlbumListened(uri) || llIsTrackListened(uri));
   if (listened) {
     if (!existing) {
-      const first = row.firstElementChild;
-      if (first) {
+      const titleSlot = row.querySelector('.main-trackList-rowMainContent, .main-trackList-rowTitle, [data-testid="tracklist-row-title"]')
+        || row.firstElementChild;
+      if (titleSlot) {
         const wrap = document.createElement('span');
         wrap.innerHTML = llBadgeMarkup(LL_BADGE_TRACKLIST_CLASS);
-        first.prepend(wrap.firstElementChild);
+        titleSlot.prepend(wrap.firstElementChild);
       }
     }
   } else if (existing) {
     existing.remove();
   }
-  row.dataset.llProcessed = '1';
   row.dataset.llStatus = listened ? '1' : '0';
 }
 
@@ -513,7 +512,7 @@ function llDecorateAlbumHeader() {
   const uri = llCurrentAlbumUriFromRoute();
   document.querySelectorAll(`.${LL_BADGE_HEADER_CLASS}`).forEach((el) => el.remove());
   if (!uri || !llIsAlbumListened(uri)) return;
-  const title = document.querySelector('[data-testid="entityTitle"] h1, [data-testid="entityTitle"], main h1');
+  const title = document.querySelector('.main-entityHeader-title, [data-testid="entityTitle"] h1, [data-testid="entityTitle"], main h1');
   if (!title || title.dataset.llHeaderTagged === '1') return;
   const span = document.createElement('span');
   span.innerHTML = llBadgeMarkup(LL_BADGE_HEADER_CLASS);
@@ -615,7 +614,7 @@ function llDecorateNowPlaying() {
   const albumUri = item.album?.uri;
   const listened = (trackUri && llIsTrackListened(trackUri)) || (albumUri && llIsAlbumListened(albumUri));
   if (!listened) return;
-  const titleEl = document.querySelector('[data-testid="context-item-info-title"], [data-testid="now-playing-widget"] a');
+  const titleEl = document.querySelector('[data-testid="context-item-info-title"] a, [data-testid="context-item-info-title"], [data-testid="now-playing-widget"] [data-testid="context-item-link"], [data-testid="now-playing-widget"] a[href^="/album/"], [data-testid="now-playing-widget"] a');
   if (!titleEl) return;
   const span = document.createElement('span');
   span.innerHTML = llBadgeMarkup(LL_BADGE_NOWPLAYING_CLASS);
