@@ -510,29 +510,11 @@ function llCurrentAlbumUriFromRoute() {
   return m ? `spotify:album:${m[1]}` : null;
 }
 
-function llFindAlbumHeaderTitleEl() {
-  const direct = document.querySelector('.main-entityHeader-title, [data-testid="entityTitle"] h1, [data-testid="entityTitle"], main h1, main h2');
-  if (direct) return direct;
-  const container = document.querySelector('[class*="entityHeader"], section[aria-labelledby]');
-  if (!container) return null;
-  const candidates = container.querySelectorAll('span[data-encore-id="text"], [data-encore-id="text"], button span, a span, span');
-  let best = null;
-  let bestSize = 0;
-  for (const el of candidates) {
-    if (el.querySelector('*')) continue;
-    if (!el.textContent || !el.textContent.trim()) continue;
-    const size = parseFloat(getComputedStyle(el).fontSize) || 0;
-    if (size > bestSize) { best = el; bestSize = size; }
-  }
-  return best;
-}
-
 function llDecorateAlbumHeader() {
   const uri = llCurrentAlbumUriFromRoute();
   document.querySelectorAll(`.${LL_BADGE_HEADER_CLASS}`).forEach((el) => el.remove());
-  document.querySelectorAll('[data-ll-header-tagged="1"]').forEach((el) => { delete el.dataset.llHeaderTagged; });
   if (!uri || !llIsAlbumListened(uri)) return;
-  const title = llFindAlbumHeaderTitleEl();
+  const title = document.querySelector('.main-entityHeader-title, [data-testid="entityTitle"] h1, [data-testid="entityTitle"], main h1');
   if (!title || title.dataset.llHeaderTagged === '1') return;
   const span = document.createElement('span');
   span.innerHTML = llBadgeMarkup(LL_BADGE_HEADER_CLASS);
@@ -540,9 +522,8 @@ function llDecorateAlbumHeader() {
   if (rec?.listenedAt) {
     span.firstElementChild.setAttribute('title', `Listened on ${new Date(rec.listenedAt).toLocaleDateString()}`);
   }
-  const target = title.tagName === 'H1' || title.tagName === 'H2' ? title : (title.parentElement || title);
-  target.appendChild(span.firstElementChild);
-  target.dataset.llHeaderTagged = '1';
+  title.appendChild(span.firstElementChild);
+  title.dataset.llHeaderTagged = '1';
 }
 
 //#endregion
@@ -627,15 +608,6 @@ function llStopNowPlayingSurface() {
   document.querySelectorAll(`.${LL_BADGE_NOWPLAYING_CLASS}`).forEach((el) => el.remove());
 }
 
-function llFindNowPlayingTitleEl() {
-  const direct = document.querySelector('[data-testid="context-item-info-title"] a, [data-testid="context-item-info-title"], [data-testid="now-playing-widget"] [data-testid="context-item-link"], [data-testid="now-playing-widget"] a[href^="/album/"], [data-testid="now-playing-widget"] a[href^="/track/"], [data-testid="now-playing-widget"] a');
-  if (direct) return direct;
-  const widget = document.querySelector('[data-testid="now-playing-widget"], footer [class*="nowPlaying" i], aside [class*="nowPlaying" i]');
-  if (!widget) return null;
-  const link = widget.querySelector('a[href^="/album/"], a[href^="/track/"], a');
-  return link || widget.querySelector('span[data-encore-id="text"]');
-}
-
 function llDecorateNowPlaying() {
   document.querySelectorAll(`.${LL_BADGE_NOWPLAYING_CLASS}`).forEach((el) => el.remove());
   const item = Spicetify.Player?.data?.item;
@@ -644,7 +616,7 @@ function llDecorateNowPlaying() {
   const albumUri = item.album?.uri;
   const listened = (trackUri && llIsTrackListened(trackUri)) || (albumUri && llIsAlbumListened(albumUri));
   if (!listened) return;
-  const titleEl = llFindNowPlayingTitleEl();
+  const titleEl = document.querySelector('[data-testid="context-item-info-title"] a, [data-testid="context-item-info-title"], [data-testid="now-playing-widget"] a[href^="/album/"], [data-testid="now-playing-widget"] a[href^="/track/"], [data-testid="now-playing-widget"] a');
   if (!titleEl) return;
   const span = document.createElement('span');
   span.innerHTML = llBadgeMarkup(LL_BADGE_NOWPLAYING_CLASS);
