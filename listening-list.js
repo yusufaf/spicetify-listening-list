@@ -95,7 +95,7 @@ const LL_BASE_CSS = `
   .ll-badge--tracklist { width: 14px; height: 14px; margin-right: 6px; vertical-align: middle; }
   .ll-badge--header { width: 18px; height: 18px; margin-left: 8px; vertical-align: middle; }
   .ll-badge-card-wrapper { position: relative; height: 0; width: 0; overflow: visible; pointer-events: none; z-index: 100; }
-  .ll-badge--card { position: absolute; top: 6px; left: 6px; width: 22px; height: 22px; background: rgba(0,0,0,0.6); border-radius: 50%; padding: 3px; box-sizing: border-box; }
+  .ll-badge--card { position: absolute; top: 10px; left: 10px; width: 22px; height: 22px; background: rgba(0,0,0,0.6); border-radius: 50%; padding: 3px; box-sizing: border-box; }
   .ll-badge--nowplaying { width: 12px; height: 12px; margin-left: 6px; vertical-align: middle; }
   .ll-badge--style-dot svg { display: none; }
   .ll-badge--style-dot::after { content: ""; display: block; width: 6px; height: 6px; border-radius: 50%; background: var(--spice-button, #1ed760); }
