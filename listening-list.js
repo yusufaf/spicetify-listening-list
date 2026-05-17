@@ -441,6 +441,10 @@ function llStopTracklistSurface() {
 
 function llDecorateAllTracklistRows() {
   const rows = document.querySelectorAll('.main-trackList-trackListRow, [data-testid="tracklist-row"]');
+  if (!window.__llDebugged && rows.length > 0) {
+    window.__llDebugged = true;
+    console.log('[LL DEBUG] tracklist rows found:', rows.length, 'first row:', rows[0]);
+  }
   rows.forEach(llDecorateTracklistRow);
 }
 
@@ -513,6 +517,10 @@ function llDecorateAlbumHeader() {
   document.querySelectorAll(`.${LL_BADGE_HEADER_CLASS}`).forEach((el) => el.remove());
   if (!uri || !llIsAlbumListened(uri)) return;
   const title = document.querySelector('.main-entityHeader-title, [data-testid="entityTitle"] h1, [data-testid="entityTitle"], main h1');
+  if (!window.__llHeaderDebugged) {
+    window.__llHeaderDebugged = true;
+    console.log('[LL DEBUG] album header — uri:', uri, 'listened:', llIsAlbumListened(uri), 'title found:', !!title, 'title el:', title);
+  }
   if (!title || title.dataset.llHeaderTagged === '1') return;
   const span = document.createElement('span');
   span.innerHTML = llBadgeMarkup(LL_BADGE_HEADER_CLASS);
