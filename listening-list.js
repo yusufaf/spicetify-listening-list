@@ -47,6 +47,7 @@ const LL_BADGE_CLASS = 'll-badge';
 const LL_BADGE_TRACKLIST_CLASS = 'll-badge--tracklist';
 const LL_BADGE_HEADER_CLASS = 'll-badge--header';
 const LL_BADGE_CARD_CLASS = 'll-badge--card';
+const LL_BADGE_CARD_WRAPPER_CLASS = 'll-badge-card-wrapper';
 const LL_BADGE_NOWPLAYING_CLASS = 'll-badge--nowplaying';
 const LL_STYLE_ID = 'll-main-styles';
 const LL_MODAL_ROOT_ID = 'll-modal-root';
@@ -93,7 +94,8 @@ const LL_BASE_CSS = `
   .ll-badge { display: inline-flex; align-items: center; justify-content: center; color: var(--spice-button, #1ed760); pointer-events: none; }
   .ll-badge--tracklist { width: 14px; height: 14px; margin-right: 6px; vertical-align: middle; }
   .ll-badge--header { width: 18px; height: 18px; margin-left: 8px; vertical-align: middle; }
-  .ll-badge--card { position: absolute; top: 6px; left: 6px; width: 22px; height: 22px; background: rgba(0,0,0,0.6); border-radius: 50%; padding: 3px; }
+  .ll-badge-card-wrapper { position: relative; height: 0; width: 0; overflow: visible; pointer-events: none; z-index: 100; }
+  .ll-badge--card { position: absolute; top: 6px; left: 6px; width: 22px; height: 22px; background: rgba(0,0,0,0.6); border-radius: 50%; padding: 3px; box-sizing: border-box; }
   .ll-badge--nowplaying { width: 12px; height: 12px; margin-left: 6px; vertical-align: middle; }
   .ll-badge--style-dot svg { display: none; }
   .ll-badge--style-dot::after { content: ""; display: block; width: 6px; height: 6px; border-radius: 50%; background: var(--spice-button, #1ed760); }
@@ -549,7 +551,7 @@ function llStopAlbumCardSurface() {
   llCardHistoryUnlisten = null;
   llCardUnsub?.();
   llCardUnsub = null;
-  document.querySelectorAll(`.${LL_BADGE_CARD_CLASS}`).forEach((el) => el.remove());
+  document.querySelectorAll(`.${LL_BADGE_CARD_WRAPPER_CLASS}, .${LL_BADGE_CARD_CLASS}`).forEach((el) => el.remove());
 }
 
 function llDecorateAllAlbumCards() {
@@ -567,13 +569,12 @@ function llDecorateAlbumCard(card, anchorHint) {
   const uri = llNormalizeUri(anchor.getAttribute('href'));
   if (!uri) return;
   const listened = llIsAlbumListened(uri);
-  const existing = card.querySelector(`.${LL_BADGE_CARD_CLASS}`);
+  const existing = card.querySelector(`.${LL_BADGE_CARD_WRAPPER_CLASS}`);
   if (listened && !existing) {
-    const imgWrap = card.querySelector('img')?.parentElement || card;
-    if (getComputedStyle(imgWrap).position === 'static') imgWrap.style.position = 'relative';
-    const span = document.createElement('span');
-    span.innerHTML = llBadgeMarkup(LL_BADGE_CARD_CLASS);
-    imgWrap.appendChild(span.firstElementChild);
+    const wrapper = document.createElement('div');
+    wrapper.className = LL_BADGE_CARD_WRAPPER_CLASS;
+    wrapper.innerHTML = llBadgeMarkup(LL_BADGE_CARD_CLASS);
+    card.insertBefore(wrapper, card.firstChild);
   } else if (!listened && existing) {
     existing.remove();
   }
