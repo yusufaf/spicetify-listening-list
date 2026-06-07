@@ -1,6 +1,8 @@
 // NAME: Listening List
 // AUTHOR: yusufaf
+// x-release-please-start-version
 // VERSION: 1.0.0
+// x-release-please-end-version
 // DESCRIPTION: Mark albums and tracks as listened, with inline indicators across Spotify.
 
 (function () {
@@ -815,6 +817,9 @@ const LL_MODAL_CSS = `
   #${LL_MODAL_ROOT_ID} input[type="number"], #${LL_MODAL_ROOT_ID} input[type="range"] { background: var(--spice-card, #222); color: var(--spice-text); border: 1px solid var(--spice-subtext, #555); border-radius: 4px; padding: 4px; }
   #${LL_MODAL_ROOT_ID} button.ll-btn { background: var(--spice-button, #1ed760); color: var(--spice-button-text, #000); border: none; border-radius: 16px; padding: 6px 14px; cursor: pointer; }
   #${LL_MODAL_ROOT_ID} button.ll-btn.ll-btn--ghost { background: transparent; color: var(--spice-text); border: 1px solid var(--spice-subtext, #555); }
+  #${LL_MODAL_ROOT_ID} button.ll-btn.ll-btn--icon { background: transparent; color: var(--spice-subtext, #999); border: none; border-radius: 50%; padding: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+  #${LL_MODAL_ROOT_ID} button.ll-btn.ll-btn--icon:hover { background: var(--spice-card, #222); color: var(--spice-text); }
+  #${LL_MODAL_ROOT_ID} button.ll-btn.ll-btn--icon svg { width: 16px; height: 16px; fill: currentColor; display: block; }
   #${LL_MODAL_ROOT_ID} table { width: 100%; border-collapse: collapse; font-size: 12px; }
   #${LL_MODAL_ROOT_ID} th, #${LL_MODAL_ROOT_ID} td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--spice-card, #222); }
   #${LL_MODAL_ROOT_ID} th { cursor: pointer; user-select: none; }
@@ -1203,7 +1208,7 @@ function llRenderViewerTable() {
       <td class="ll-artist-cell" style="opacity:.85">${buildArtistCell(m)}</td>
       <td>${new Date(rec.listenedAt).toLocaleDateString()}</td>
       <td>${rec.source}</td>
-      <td><button class="ll-btn ll-btn--ghost" data-act="unmark">Unmark</button></td>
+      <td><button class="ll-btn ll-btn--icon" data-act="unmark" title="Mark unheard" aria-label="Mark unheard"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3h11V2h-11v1z"/></svg></button></td>
     `;
     tr.querySelector('.ll-name-cell a').addEventListener('click', (e) => {
       e.preventDefault();
