@@ -1,7 +1,7 @@
 // NAME: Listening List
 // AUTHOR: yusufaf
 // x-release-please-start-version
-// VERSION: 1.0.0
+// VERSION: 1.1.0
 // x-release-please-end-version
 // DESCRIPTION: Mark albums and tracks as listened, with inline indicators across Spotify.
 
