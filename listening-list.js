@@ -513,10 +513,21 @@ function llCurrentAlbumUriFromRoute() {
 
 function llDecorateAlbumHeader() {
   const uri = llCurrentAlbumUriFromRoute();
-  document.querySelectorAll(`.${LL_BADGE_HEADER_CLASS}`).forEach((el) => el.remove());
-  if (!uri || !llIsAlbumListened(uri)) return;
   const title = document.querySelector('.main-entityHeader-title, [data-testid="entityTitle"] h1, [data-testid="entityTitle"], main h1');
-  if (!title || title.dataset.llHeaderTagged === '1') return;
+  const listened = !!uri && !!title && llIsAlbumListened(uri);
+  const existing = title?.querySelector(`.${LL_BADGE_HEADER_CLASS}`) || null;
+
+  // Drop badges stranded on a previous header (navigation) or on an album no
+  // longer marked, but leave a correct badge alone. This tick runs from a
+  // MutationObserver, so removing and re-appending unconditionally would either
+  // loop forever or — with a sticky guard flag — delete the badge and refuse to
+  // rebuild it.
+  document.querySelectorAll(`.${LL_BADGE_HEADER_CLASS}`).forEach((el) => {
+    if (!listened || el !== existing) el.remove();
+  });
+
+  if (!listened || existing) return;
+
   const span = document.createElement('span');
   span.innerHTML = llBadgeMarkup(LL_BADGE_HEADER_CLASS);
   const rec = llData.albums[uri];
@@ -524,7 +535,6 @@ function llDecorateAlbumHeader() {
     span.firstElementChild.setAttribute('title', `Listened on ${new Date(rec.listenedAt).toLocaleDateString()}`);
   }
   title.appendChild(span.firstElementChild);
-  title.dataset.llHeaderTagged = '1';
 }
 
 //#endregion

@@ -1,7 +1,6 @@
 {
   "name": "Listening List",
   "description": "Mark albums and tracks as listened, with inline indicators across Spotify.",
-  "preview": "preview.png",
   "main": "listening-list.js",
   "readme": "README.md",
   "authors": [
