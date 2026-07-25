@@ -2,6 +2,8 @@
 
 Mark albums and tracks as listened, with inline indicators across Spotify.
 
+![Listened badges beside each track on an album tracklist](tracklist-badges.png)
+
 ## Features
 - Mark albums and tracks as listened via right-click context menu
 - Inline badge surfaces (tracklist rows, album page header, album cards, now-playing bar) — each toggleable
@@ -29,8 +31,24 @@ The extension stores two LocalStorage records: your listened items and your conf
 ## Usage
 Right-click any track or album → "Mark as listened". A badge appears in enabled surfaces. Open the profile menu → "Listening List" to access Settings, the Viewer, and Stats.
 
+## Screenshots
+
+A marked album gets a badge on its page header:
+
+![Album page header with a listened badge under the album title](album-header.png)
+
+The Viewer lists everything you have marked, with filtering and sorting:
+
+![Viewer tab listing marked albums with artist, date listened, and source](viewer.png)
+
+Stats summarises totals, recent activity, and how each item got marked:
+
+![Stats tab showing totals, last 30 days, breakdown by source, and date range](stats.png)
+
 ## Settings
 Accessed via profile menu → "Listening List". Toggle surfaces, choose badge style, enable auto-seed / auto-on-play, export/import data, clear all.
+
+![Settings tab with surface toggles, badge style, auto-seed, auto-mark, and data controls](settings.png)
 
 ## Troubleshooting
 - Badges not appearing? Confirm the relevant surface toggle is on in Settings and reload Spotify.

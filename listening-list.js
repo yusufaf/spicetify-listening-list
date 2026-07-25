@@ -92,6 +92,17 @@ const LL_EXPORT_SCHEMA_VERSION = 1;
 /** Metadata cache LocalStorage key (name/artist by URI) */
 const LL_META_KEY = 'listening-list-meta';
 
+/** GitHub mark icon SVG path (16x16 viewBox, Bootstrap Icons github, MIT) */
+const LL_GITHUB_SVG_PATH = 'M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z';
+
+/** Extension version, shown in the settings modal footer. Kept in sync with the VERSION banner by release-please. */
+// x-release-please-start-version
+const LL_VERSION = '1.0.0';
+// x-release-please-end-version
+
+/** GitHub repo slug, used to build the "report an issue" link in the settings modal footer */
+const LL_GITHUB_REPO = 'yusufaf/spicetify-listening-list';
+
 const LL_BASE_CSS = `
   .ll-badge { display: inline-flex; align-items: center; justify-content: center; color: var(--spice-button, #1ed760); pointer-events: none; }
   .ll-badge--tracklist { width: 14px; height: 14px; margin-right: 6px; vertical-align: middle; }
@@ -513,10 +524,21 @@ function llCurrentAlbumUriFromRoute() {
 
 function llDecorateAlbumHeader() {
   const uri = llCurrentAlbumUriFromRoute();
-  document.querySelectorAll(`.${LL_BADGE_HEADER_CLASS}`).forEach((el) => el.remove());
-  if (!uri || !llIsAlbumListened(uri)) return;
   const title = document.querySelector('.main-entityHeader-title, [data-testid="entityTitle"] h1, [data-testid="entityTitle"], main h1');
-  if (!title || title.dataset.llHeaderTagged === '1') return;
+  const listened = !!uri && !!title && llIsAlbumListened(uri);
+  const existing = title?.querySelector(`.${LL_BADGE_HEADER_CLASS}`) || null;
+
+  // Drop badges stranded on a previous header (navigation) or on an album no
+  // longer marked, but leave a correct badge alone. This tick runs from a
+  // MutationObserver, so removing and re-appending unconditionally would either
+  // loop forever or — with a sticky guard flag — delete the badge and refuse to
+  // rebuild it.
+  document.querySelectorAll(`.${LL_BADGE_HEADER_CLASS}`).forEach((el) => {
+    if (!listened || el !== existing) el.remove();
+  });
+
+  if (!listened || existing) return;
+
   const span = document.createElement('span');
   span.innerHTML = llBadgeMarkup(LL_BADGE_HEADER_CLASS);
   const rec = llData.albums[uri];
@@ -524,7 +546,6 @@ function llDecorateAlbumHeader() {
     span.firstElementChild.setAttribute('title', `Listened on ${new Date(rec.listenedAt).toLocaleDateString()}`);
   }
   title.appendChild(span.firstElementChild);
-  title.dataset.llHeaderTagged = '1';
 }
 
 //#endregion
@@ -827,6 +848,50 @@ const LL_MODAL_CSS = `
   #${LL_MODAL_ROOT_ID} td a:hover { text-decoration: underline; }
   #${LL_MODAL_ROOT_ID} .ll-artist-link { color: inherit; }
   #${LL_MODAL_ROOT_ID} .ll-artist-link:hover { color: var(--spice-text); text-decoration: underline; }
+
+  /* Spicetify's isLarge PopupModal stretches its dialog to fill the whole
+     viewport regardless of content length; scope the cap to just our modal
+     (:has) so other isLarge modals in Spotify/other extensions are untouched. */
+  .main-embedWidgetGenerator-container:has(#${LL_MODAL_ROOT_ID}) {
+    height: auto !important;
+    max-height: min(80vh, 720px) !important;
+  }
+  .main-trackCreditsModal-mainSection:has(#${LL_MODAL_ROOT_ID}) {
+    overflow-y: auto !important;
+  }
+
+  #${LL_MODAL_ROOT_ID} .ll-modal-footer {
+    position: sticky;
+    bottom: 0;
+    margin-top: 16px;
+    padding: 10px 0 2px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--background-elevated-base, var(--spice-card, #282828));
+  }
+
+  #${LL_MODAL_ROOT_ID} .ll-modal-version {
+    color: var(--spice-subtext, #999);
+    font-size: 0.75rem;
+  }
+
+  #${LL_MODAL_ROOT_ID} .ll-modal-github-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--spice-subtext, #999);
+  }
+
+  #${LL_MODAL_ROOT_ID} .ll-modal-github-link:hover {
+    color: var(--spice-text, #fff);
+  }
+
+  #${LL_MODAL_ROOT_ID} .ll-modal-github-icon {
+    width: 16px;
+    height: 16px;
+  }
 `;
 
 let llActiveTab = 'viewer';
@@ -867,6 +932,16 @@ function llOpenModal(tab) {
     if (llActiveTab === 'stats') return llRenderStatsTab();
     return llRenderSettingsTab();
   }
+
+  const footer = document.createElement('div');
+  footer.className = 'll-modal-footer';
+  footer.innerHTML = `
+    <span class="ll-modal-version">v${LL_VERSION}</span>
+    <a class="ll-modal-github-link" href="https://github.com/${LL_GITHUB_REPO}/issues/new" target="_blank" rel="noopener noreferrer" title="Report an issue on GitHub">
+      <svg viewBox="0 0 16 16" class="ll-modal-github-icon"><path d="${LL_GITHUB_SVG_PATH}"/></svg>
+    </a>
+  `;
+  root.appendChild(footer);
 
   Spicetify.PopupModal.display({ title: 'Listening List', content: root, isLarge: true });
 }
