@@ -856,14 +856,21 @@ async function llFetchAlbumTrackUris(uri) {
     // The wg:// album endpoint has no track list on current clients, so GraphQL is primary.
     const out = [];
     const pageSize = 300;
-    for (let offset = 0, total = Infinity; offset < total && offset < 3000; offset += pageSize) {
+    let offset = 0, total = Infinity;
+    while (offset < total && offset < 3000) {
       const res = await Spicetify.GraphQL.Request(
         Spicetify.GraphQL.Definitions.getAlbum,
         { uri, locale: Spicetify.Locale?.getLocale?.() || 'en', limit: pageSize, offset },
       );
+      if (res?.errors?.length) {
+        console.warn('[Listening List] getAlbum returned errors', uri, res.errors);
+        break;
+      }
       const t = res?.data?.albumUnion?.tracksV2;
-      if (!t?.items) break;
+      if (!t?.items?.length) break;
       for (const it of t.items) if (it?.track?.uri) out.push(it.track.uri);
+      // Advance by what came back, not by the requested page size: the endpoint may clamp `limit`.
+      offset += t.items.length;
       total = typeof t.totalCount === 'number' ? t.totalCount : out.length;
     }
     // Don't cache an empty result: an album that was briefly unresolvable would
@@ -882,7 +889,11 @@ async function llFetchAlbumTrackUris(uri) {
  */
 async function llCheckWantedAlbumCompletion(albumUri) {
   const tracks = await llFetchAlbumTrackUris(albumUri);
-  if (!llIsAlbumWanted(albumUri) || tracks.length === 0) return;
+  if (tracks.length === 0) {
+    console.warn('[Listening List] No tracks resolved for wanted album; completion skipped', albumUri);
+    return;
+  }
+  if (!llIsAlbumWanted(albumUri)) return;
   const heard = tracks.filter(llIsTrackListened).length;
   const min = Math.min(tracks.length, Math.max(1, llConfig.autoSeed.minTracksPerAlbum));
   if (heard < min) return;
@@ -1300,7 +1311,7 @@ function llSettingsData() {
   clr.className = 'll-btn ll-btn--ghost';
   clr.textContent = 'Clear all';
   clr.addEventListener('click', () => {
-    if (!confirm('Clear all listened data? This cannot be undone.')) return;
+    if (!confirm('Clear all listened data and the want-to-listen list? This cannot be undone.')) return;
     llData = llEmptyData(); llSaveData(); llEmit();
     Spicetify.showNotification?.('Listening List cleared');
   });
