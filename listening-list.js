@@ -17,10 +17,17 @@
  */
 
 /**
+ * @typedef {Object} WantedRecord
+ * @property {number} addedAt - ms epoch when added to the want-to-listen list
+ * @property {"manual"|"import"} source
+ */
+
+/**
  * @typedef {Object} ListenedData
  * @property {number} schemaVersion
  * @property {Record<string, ListenedRecord>} albums - keyed by full URI
  * @property {Record<string, ListenedRecord>} tracks - keyed by full URI
+ * @property {Record<string, WantedRecord>} wanted - album URIs on the want-to-listen list; never overlaps `albums`
  */
 
 /**
@@ -41,11 +48,12 @@ const LL_DATA_KEY = 'listening-list-data';
 const LL_CONFIG_KEY = 'listening-list-config';
 
 /** Current schema versions */
-const LL_DATA_SCHEMA_VERSION = 1;
+const LL_DATA_SCHEMA_VERSION = 2;
 const LL_CONFIG_SCHEMA_VERSION = 1;
 
 /** DOM IDs / classes (unique-prefixed) */
 const LL_BADGE_CLASS = 'll-badge';
+const LL_BADGE_WANTED_CLASS = 'll-badge--wanted';
 const LL_BADGE_TRACKLIST_CLASS = 'll-badge--tracklist';
 const LL_BADGE_HEADER_CLASS = 'll-badge--header';
 const LL_BADGE_CARD_CLASS = 'll-badge--card';
@@ -77,17 +85,20 @@ const LL_DEFAULT_CONFIG = Object.freeze({
 
 /** Empty data object */
 function llEmptyData() {
-  return { schemaVersion: LL_DATA_SCHEMA_VERSION, albums: {}, tracks: {} };
+  return { schemaVersion: LL_DATA_SCHEMA_VERSION, albums: {}, tracks: {}, wanted: {} };
 }
 
 /** Checkmark icon (16x16 viewBox) */
 const LL_CHECK_SVG_PATH = 'M13.485 1.929a1 1 0 0 1 0 1.414L6.414 10.414a1 1 0 0 1-1.414 0L1.515 6.929a1 1 0 1 1 1.414-1.414L5.707 8.293l6.364-6.364a1 1 0 0 1 1.414 0z';
 
+/** Bookmark icon (16x16 viewBox, Bootstrap Icons bookmark-fill, MIT) — want-to-listen badge */
+const LL_BOOKMARK_SVG_PATH = 'M2 2v13.5a.5.5 0 0 0 .74.439L8 13.069l5.26 2.87A.5.5 0 0 0 14 15.5V2a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2z';
+
 /** Gear icon (16x16 viewBox) */
 const LL_GEAR_SVG_PATH = 'M9.405 1.05c-.413-1.4-2.397-1.4-2.81 0l-.1.34a1.464 1.464 0 0 1-2.105.872l-.31-.17c-1.283-.698-2.686.705-1.987 1.987l.169.311c.446.82.023 1.841-.872 2.105l-.34.1c-1.4.413-1.4 2.397 0 2.81l.34.1a1.464 1.464 0 0 1 .872 2.105l-.17.31c-.698 1.283.705 2.686 1.987 1.987l.311-.169a1.464 1.464 0 0 1 2.105.872l.1.34c.413 1.4 2.397 1.4 2.81 0l.1-.34a1.464 1.464 0 0 1 2.105-.872l.31.17c1.283.698 2.686-.705 1.987-1.987l-.169-.311a1.464 1.464 0 0 1 .872-2.105l.34-.1c1.4-.413 1.4-2.397 0-2.81l-.34-.1a1.464 1.464 0 0 1-.872-2.105l.17-.31c.698-1.283-.705-2.686-1.987-1.987l-.311.169a1.464 1.464 0 0 1-2.105-.872zM8 10.93a2.929 2.929 0 1 1 0-5.858 2.929 2.929 0 0 1 0 5.858z';
 
 /** Export schema version (matches data schema for now) */
-const LL_EXPORT_SCHEMA_VERSION = 1;
+const LL_EXPORT_SCHEMA_VERSION = 2;
 
 /** Metadata cache LocalStorage key (name/artist by URI) */
 const LL_META_KEY = 'listening-list-meta';
@@ -114,6 +125,9 @@ const LL_BASE_CSS = `
   .ll-badge--style-dot::after { content: ""; display: block; width: 6px; height: 6px; border-radius: 50%; background: var(--spice-button, #1ed760); }
   .ll-badge--style-text svg { display: none; }
   .ll-badge--style-text::after { content: "✓"; font-size: 11px; line-height: 1; color: var(--spice-button, #1ed760); }
+  .ll-badge--wanted { color: var(--spice-subtext, #b3b3b3); }
+  .ll-badge--wanted.ll-badge--style-dot::after { background: transparent; border: 1.5px solid currentColor; box-sizing: border-box; }
+  .ll-badge--wanted.ll-badge--style-text::after { content: "⚑"; color: currentColor; }
 `;
 
 function llEnsureStyles() {
@@ -124,10 +138,23 @@ function llEnsureStyles() {
   document.head.appendChild(s);
 }
 
-function llBadgeMarkup(extraClass) {
+/**
+ * @param {string} extraClass - surface size class
+ * @param {"listened"|"wanted"} [variant]
+ */
+function llBadgeMarkup(extraClass, variant = 'listened') {
   const styleClass = llConfig.badgeStyle === 'dot' ? ' ll-badge--style-dot'
                     : llConfig.badgeStyle === 'text' ? ' ll-badge--style-text' : '';
-  return `<span class="${LL_BADGE_CLASS} ${extraClass}${styleClass}" title="Listened" aria-label="Listened"><svg viewBox="0 0 16 16" width="100%" height="100%" fill="currentColor"><path d="${LL_CHECK_SVG_PATH}"/></svg></span>`;
+  const wanted = variant === 'wanted';
+  const variantClass = wanted ? ` ${LL_BADGE_WANTED_CLASS}` : '';
+  const label = wanted ? 'Want to listen' : 'Listened';
+  const path = wanted ? LL_BOOKMARK_SVG_PATH : LL_CHECK_SVG_PATH;
+  return `<span class="${LL_BADGE_CLASS} ${extraClass}${variantClass}${styleClass}" title="${label}" aria-label="${label}"><svg viewBox="0 0 16 16" width="100%" height="100%" fill="currentColor"><path d="${path}"/></svg></span>`;
+}
+
+/** Variant of an existing badge element, for comparing against the desired state. */
+function llBadgeVariant(el) {
+  return el?.classList.contains(LL_BADGE_WANTED_CLASS) ? 'wanted' : 'listened';
 }
 
 //#endregion
@@ -192,11 +219,17 @@ function llMigrateData(parsed) {
     console.warn(`[Listening List] Data schema v${v} newer than supported v${LL_DATA_SCHEMA_VERSION}; refusing to write.`);
     return { ...llEmptyData(), schemaVersion: v, __readOnly: true };
   }
-  return {
+  const side = (o) => (o && typeof o === 'object' ? o : {});
+  // v0/v1 → v2: `wanted` map added. Older data simply lacks it.
+  const data = {
     schemaVersion: LL_DATA_SCHEMA_VERSION,
-    albums: parsed.albums && typeof parsed.albums === 'object' ? parsed.albums : {},
-    tracks: parsed.tracks && typeof parsed.tracks === 'object' ? parsed.tracks : {},
+    albums: side(parsed.albums),
+    tracks: side(parsed.tracks),
+    wanted: v >= 2 ? side(parsed.wanted) : {},
   };
+  // Listened wins: an album can't be both listened and wanted.
+  for (const uri of Object.keys(data.wanted)) if (data.albums[uri]) delete data.wanted[uri];
+  return data;
 }
 
 function llLoadConfig() {
@@ -376,18 +409,23 @@ function llNormalizeUri(input) {
 
 function llIsAlbumListened(uri) { return !!llData.albums[uri]; }
 function llIsTrackListened(uri) { return !!llData.tracks[uri]; }
+function llIsAlbumWanted(uri) { return !!llData.wanted[uri]; }
+
+function llRefuseIfReadOnly() {
+  if (!llData.__readOnly) return false;
+  Spicetify.showNotification?.('Listening List: data is read-only (schema newer than this version)');
+  return true;
+}
 
 function llMarkOne(uri, source) {
-  if (llData.__readOnly) {
-    Spicetify.showNotification?.('Listening List: data is read-only (schema newer than this version)');
-    return false;
-  }
+  if (llRefuseIfReadOnly()) return false;
   const norm = llNormalizeUri(uri);
   if (!norm) return false;
   const rec = { listenedAt: Date.now(), source };
   if (llIsAlbumUri(norm)) {
     if (llData.albums[norm]) return false;
     llData.albums[norm] = rec;
+    delete llData.wanted[norm];
     return true;
   }
   if (llIsTrackUri(norm)) {
@@ -422,6 +460,49 @@ function llUnmarkMany(uris) {
   for (const u of uris) if (llUnmarkOne(u)) removed++;
   if (removed > 0) { llSaveData(); llEmit(); }
   return removed;
+}
+
+/** Add an album to the want-to-listen list. Albums only; already-listened albums are refused. */
+function llWantOne(uri, source) {
+  if (llRefuseIfReadOnly()) return false;
+  const norm = llNormalizeUri(uri);
+  if (!norm || !llIsAlbumUri(norm)) return false;
+  if (llData.albums[norm] || llData.wanted[norm]) return false;
+  llData.wanted[norm] = { addedAt: Date.now(), source };
+  return true;
+}
+
+function llUnwantOne(uri) {
+  const norm = llNormalizeUri(uri);
+  if (!norm || !llIsAlbumUri(norm) || !llData.wanted[norm]) return false;
+  delete llData.wanted[norm];
+  return true;
+}
+
+/**
+ * @param {string[]} uris
+ * @param {"manual"|"import"} source
+ */
+function llWantMany(uris, source) {
+  let added = 0, skipped = 0;
+  for (const u of uris) (llWantOne(u, source) ? added++ : skipped++);
+  if (added > 0) { llSaveData(); llEmit(); }
+  return { added, skipped };
+}
+
+function llUnwantMany(uris) {
+  let removed = 0;
+  for (const u of uris) if (llUnwantOne(u)) removed++;
+  if (removed > 0) { llSaveData(); llEmit(); }
+  return removed;
+}
+
+/** "listened" beats "wanted"; null when neither. */
+function llAlbumState(uri) {
+  if (!uri) return null;
+  if (llIsAlbumListened(uri)) return 'listened';
+  if (llIsAlbumWanted(uri)) return 'wanted';
+  return null;
 }
 
 //#endregion
@@ -464,23 +545,32 @@ function llDecorateTracklistRow(row) {
     uri = llNormalizeUri(a.getAttribute('href'));
     if (uri) break;
   }
-  const existing = row.querySelector(`.${LL_BADGE_TRACKLIST_CLASS}`);
+  let existing = row.querySelector(`.${LL_BADGE_TRACKLIST_CLASS}`);
   const ambientAlbum = llCurrentAlbumUriFromRoute();
   const listened = (uri && (llIsAlbumListened(uri) || llIsTrackListened(uri)))
                    || (!!ambientAlbum && llIsAlbumListened(ambientAlbum));
-  if (listened) {
+  // Want-to-listen is album-level: the row's own album link (playlist/search
+  // rows) or the album page being viewed.
+  const rowAlbum = !listened && llNormalizeUri(row.querySelector('a[href^="/album/"]')?.getAttribute('href'));
+  const wanted = !listened && ((!!rowAlbum && llIsAlbumWanted(rowAlbum)) || (!!ambientAlbum && llIsAlbumWanted(ambientAlbum)));
+  const state = listened ? 'listened' : wanted ? 'wanted' : null;
+  if (existing && state && llBadgeVariant(existing) !== state) {
+    existing.remove();
+    existing = null;
+  }
+  if (state) {
     if (!existing) {
       const titleSlot = row.querySelector('.main-trackList-rowMainContentTitle, [data-testid="internal-track-link"], .main-trackList-rowTitle, [data-testid="tracklist-row-title"]');
       if (titleSlot) {
         const wrap = document.createElement('span');
-        wrap.innerHTML = llBadgeMarkup(LL_BADGE_TRACKLIST_CLASS);
+        wrap.innerHTML = llBadgeMarkup(LL_BADGE_TRACKLIST_CLASS, state);
         titleSlot.prepend(wrap.firstElementChild);
       }
     }
   } else if (existing) {
     existing.remove();
   }
-  row.dataset.llStatus = listened ? '1' : '0';
+  row.dataset.llStatus = listened ? '1' : wanted ? 'w' : '0';
 }
 
 function llRowNeedsRefresh(row) {
@@ -525,8 +615,10 @@ function llCurrentAlbumUriFromRoute() {
 function llDecorateAlbumHeader() {
   const uri = llCurrentAlbumUriFromRoute();
   const title = document.querySelector('.main-entityHeader-title, [data-testid="entityTitle"] h1, [data-testid="entityTitle"], main h1');
-  const listened = !!uri && !!title && llIsAlbumListened(uri);
-  const existing = title?.querySelector(`.${LL_BADGE_HEADER_CLASS}`) || null;
+  const state = title ? llAlbumState(uri) : null;
+  const current = title?.querySelector(`.${LL_BADGE_HEADER_CLASS}`) || null;
+  // A badge of the wrong variant (want → listened flip) counts as stale.
+  const existing = current && llBadgeVariant(current) === state ? current : null;
 
   // Drop badges stranded on a previous header (navigation) or on an album no
   // longer marked, but leave a correct badge alone. This tick runs from a
@@ -534,18 +626,22 @@ function llDecorateAlbumHeader() {
   // loop forever or — with a sticky guard flag — delete the badge and refuse to
   // rebuild it.
   document.querySelectorAll(`.${LL_BADGE_HEADER_CLASS}`).forEach((el) => {
-    if (!listened || el !== existing) el.remove();
+    if (!state || el !== existing) el.remove();
   });
 
-  if (!listened || existing) return;
+  if (!state || existing) return;
 
   const span = document.createElement('span');
-  span.innerHTML = llBadgeMarkup(LL_BADGE_HEADER_CLASS);
-  const rec = llData.albums[uri];
-  if (rec?.listenedAt) {
-    span.firstElementChild.setAttribute('title', `Listened on ${new Date(rec.listenedAt).toLocaleDateString()}`);
+  span.innerHTML = llBadgeMarkup(LL_BADGE_HEADER_CLASS, state);
+  const badge = span.firstElementChild;
+  if (state === 'listened') {
+    const rec = llData.albums[uri];
+    if (rec?.listenedAt) badge.setAttribute('title', `Listened on ${new Date(rec.listenedAt).toLocaleDateString()}`);
+  } else {
+    const rec = llData.wanted[uri];
+    if (rec?.addedAt) badge.setAttribute('title', `Want to listen · added ${new Date(rec.addedAt).toLocaleDateString()}`);
   }
-  title.appendChild(span.firstElementChild);
+  title.appendChild(badge);
 }
 
 //#endregion
@@ -591,14 +687,18 @@ function llDecorateAlbumCard(card, anchorHint) {
   if (!anchor) return;
   const uri = llNormalizeUri(anchor.getAttribute('href'));
   if (!uri) return;
-  const listened = llIsAlbumListened(uri);
-  const existing = card.querySelector(`.${LL_BADGE_CARD_WRAPPER_CLASS}`);
-  if (listened && !existing) {
+  const state = llAlbumState(uri);
+  let existing = card.querySelector(`.${LL_BADGE_CARD_WRAPPER_CLASS}`);
+  if (existing && state && llBadgeVariant(existing.firstElementChild) !== state) {
+    existing.remove();
+    existing = null;
+  }
+  if (state && !existing) {
     const wrapper = document.createElement('div');
     wrapper.className = LL_BADGE_CARD_WRAPPER_CLASS;
-    wrapper.innerHTML = llBadgeMarkup(LL_BADGE_CARD_CLASS);
+    wrapper.innerHTML = llBadgeMarkup(LL_BADGE_CARD_CLASS, state);
     card.insertBefore(wrapper, card.firstChild);
-  } else if (!listened && existing) {
+  } else if (!state && existing) {
     existing.remove();
   }
 }
@@ -637,11 +737,12 @@ function llDecorateNowPlaying() {
   const trackUri = item.uri;
   const albumUri = item.album?.uri;
   const listened = (trackUri && llIsTrackListened(trackUri)) || (albumUri && llIsAlbumListened(albumUri));
-  if (!listened) return;
+  const state = listened ? 'listened' : (albumUri && llIsAlbumWanted(albumUri)) ? 'wanted' : null;
+  if (!state) return;
   const titleEl = document.querySelector('.main-trackInfo-name a, .main-trackInfo-name, [data-testid="context-item-info-title"] a, [data-testid="context-item-info-title"], [data-testid="now-playing-widget"] a[href^="/album/"], [data-testid="now-playing-widget"] a[href^="/track/"], [data-testid="now-playing-widget"] a');
   if (!titleEl) return;
   const span = document.createElement('span');
-  span.innerHTML = llBadgeMarkup(LL_BADGE_NOWPLAYING_CLASS);
+  span.innerHTML = llBadgeMarkup(LL_BADGE_NOWPLAYING_CLASS, state);
   titleEl.appendChild(span.firstElementChild);
 }
 
@@ -721,6 +822,10 @@ function llStartAutoOnPlay() {
         llMarkMany([uri], 'auto-play');
       }
       llAOPCurrentMarked = true;
+      const albumUri = data.item.album?.uri;
+      if (albumUri && llIsAlbumWanted(albumUri)) {
+        llCheckWantedAlbumCompletion(albumUri).catch((e) => console.warn('[Listening List] Album completion check failed', albumUri, e));
+      }
     }
   };
   Spicetify.Player.addEventListener('songchange', llAOPSongChangeHandler);
@@ -738,6 +843,54 @@ function llStopAutoOnPlay() {
 function llRestartAutoOnPlay() {
   llStopAutoOnPlay();
   if (llConfig.autoOnPlay.enabled) llStartAutoOnPlay();
+}
+
+/** Album URI → track URIs, cached for the session. */
+const llAlbumTracksCache = new Map();
+const llAlbumTracksInflight = new Map();
+
+async function llFetchAlbumTrackUris(uri) {
+  if (llAlbumTracksCache.has(uri)) return llAlbumTracksCache.get(uri);
+  if (llAlbumTracksInflight.has(uri)) return llAlbumTracksInflight.get(uri);
+  const p = (async () => {
+    // The wg:// album endpoint has no track list on current clients, so GraphQL is primary.
+    const out = [];
+    const pageSize = 300;
+    for (let offset = 0, total = Infinity; offset < total && offset < 3000; offset += pageSize) {
+      const res = await Spicetify.GraphQL.Request(
+        Spicetify.GraphQL.Definitions.getAlbum,
+        { uri, locale: Spicetify.Locale?.getLocale?.() || 'en', limit: pageSize, offset },
+      );
+      const t = res?.data?.albumUnion?.tracksV2;
+      if (!t?.items) break;
+      for (const it of t.items) if (it?.track?.uri) out.push(it.track.uri);
+      total = typeof t.totalCount === 'number' ? t.totalCount : out.length;
+    }
+    // Don't cache an empty result: an album that was briefly unresolvable would
+    // otherwise never complete until restart.
+    if (out.length > 0) llAlbumTracksCache.set(uri, out);
+    return out;
+  })();
+  llAlbumTracksInflight.set(uri, p);
+  try { return await p; } finally { llAlbumTracksInflight.delete(uri); }
+}
+
+/**
+ * Wanted album → listened once enough of its tracks have been heard.
+ * Threshold reuses autoSeed.minTracksPerAlbum. Best-effort: never throws
+ * into the progress handler.
+ */
+async function llCheckWantedAlbumCompletion(albumUri) {
+  const tracks = await llFetchAlbumTrackUris(albumUri);
+  if (!llIsAlbumWanted(albumUri) || tracks.length === 0) return;
+  const heard = tracks.filter(llIsTrackListened).length;
+  const min = Math.min(tracks.length, Math.max(1, llConfig.autoSeed.minTracksPerAlbum));
+  if (heard < min) return;
+  const { marked } = llMarkMany([albumUri], 'auto-play');
+  if (marked) {
+    const name = llMeta.albums[albumUri]?.name;
+    Spicetify.showNotification?.(name ? `Listened: ${name}` : 'Album moved from want-to-listen to listened');
+  }
 }
 
 //#endregion
@@ -767,7 +920,7 @@ function llExportData() {
 function llPromptImportData() {
   const wrap = document.createElement('div');
   wrap.innerHTML = `
-    <p style="margin-top:0">Paste exported JSON or choose a file. Existing entries are kept; new entries are merged (earliest <code>listenedAt</code> wins per URI).</p>
+    <p style="margin-top:0">Paste exported JSON or choose a file. Existing entries are kept; new entries are merged (earliest <code>listenedAt</code> / <code>addedAt</code> wins per URI; listened beats want-to-listen).</p>
     <input type="file" accept="application/json" id="ll-import-file" />
     <textarea id="ll-import-text" rows="10" style="width:100%; margin-top:8px; background:var(--spice-card,#222); color:var(--spice-text); border:1px solid var(--spice-subtext,#555); border-radius:4px; padding:6px;"></textarea>
     <div style="margin-top:8px; display:flex; gap:8px;">
@@ -786,7 +939,7 @@ function llPromptImportData() {
     try {
       const parsed = JSON.parse(raw);
       const result = llMergeImport(parsed);
-      Spicetify.showNotification?.(`Imported ${result.addedAlbums} albums, ${result.addedTracks} tracks`);
+      Spicetify.showNotification?.(`Imported ${result.addedAlbums} albums, ${result.addedTracks} tracks, ${result.addedWanted} to listen`);
       Spicetify.PopupModal.hide();
     } catch (e) {
       console.error('[Listening List] Import failed', e);
@@ -797,6 +950,7 @@ function llPromptImportData() {
 }
 
 function llMergeImport(payload) {
+  if (llRefuseIfReadOnly()) throw new Error('Data is read-only');
   if (!payload || typeof payload !== 'object') throw new Error('Not an object');
   const incoming = payload.data || payload;
   if (!incoming.albums || !incoming.tracks) throw new Error('Missing albums/tracks');
@@ -818,9 +972,26 @@ function llMergeImport(payload) {
   };
   mergeSide(llData.albums, incoming.albums, 'a');
   mergeSide(llData.tracks, incoming.tracks, 't');
+
+  // `wanted` is absent from v1 exports. Listened wins on both sides.
+  let addedWanted = 0;
+  if (incoming.wanted && typeof incoming.wanted === 'object') {
+    for (const [uri, rec] of Object.entries(incoming.wanted)) {
+      if (!rec || typeof rec.addedAt !== 'number' || !llIsAlbumUri(uri) || llData.albums[uri]) continue;
+      const incomingRec = { addedAt: rec.addedAt, source: rec.source === 'manual' ? 'manual' : 'import' };
+      if (!llData.wanted[uri]) {
+        llData.wanted[uri] = incomingRec;
+        addedWanted++;
+      } else if (incomingRec.addedAt < llData.wanted[uri].addedAt) {
+        llData.wanted[uri] = incomingRec;
+      }
+    }
+  }
+  for (const uri of Object.keys(llData.wanted)) if (llData.albums[uri]) delete llData.wanted[uri];
+
   llSaveData();
   llEmit();
-  return { addedAlbums, addedTracks };
+  return { addedAlbums, addedTracks, addedWanted };
 }
 
 //#endregion
@@ -1140,15 +1311,31 @@ function llSettingsData() {
 }
 let llViewerState = { kind: 'albums', sortKey: 'listenedAt', sortDir: 'desc', filter: '' };
 
+const LL_VIEWER_KINDS = [['albums', 'Albums'], ['tracks', 'Tracks'], ['wanted', 'Want to listen']];
+
+/** Per-kind table wiring: which data map, which metadata cache, which date field. */
+function llViewerKindInfo(kind) {
+  if (kind === 'wanted') return { source: llData.wanted, metaKind: 'albums', dateKey: 'addedAt', dateLabel: 'Added', titleLabel: 'Album', path: 'album' };
+  if (kind === 'tracks') return { source: llData.tracks, metaKind: 'tracks', dateKey: 'listenedAt', dateLabel: 'Listened', titleLabel: 'Track', path: 'track' };
+  return { source: llData.albums, metaKind: 'albums', dateKey: 'listenedAt', dateLabel: 'Listened', titleLabel: 'Album', path: 'album' };
+}
+
 function llRenderViewerTab() {
   const root = document.createElement('div');
   const subTabs = document.createElement('div');
   subTabs.className = 'll-tabs';
-  for (const [k, label] of [['albums', 'Albums'], ['tracks', 'Tracks']]) {
+  for (const [k, label] of LL_VIEWER_KINDS) {
     const b = document.createElement('button');
     b.className = 'll-tab' + (llViewerState.kind === k ? ' is-active' : '');
     b.textContent = label;
-    b.addEventListener('click', () => { llViewerState.kind = k; renderBody(); refreshTabs(); });
+    b.addEventListener('click', () => {
+      const prevDate = llViewerKindInfo(llViewerState.kind).dateKey;
+      llViewerState.kind = k;
+      // Date sort follows the kind's date field; name/artist sorts carry over.
+      if (llViewerState.sortKey === prevDate) llViewerState.sortKey = llViewerKindInfo(k).dateKey;
+      renderBody();
+      refreshTabs();
+    });
     subTabs.appendChild(b);
   }
   root.appendChild(subTabs);
@@ -1172,7 +1359,7 @@ function llRenderViewerTab() {
 
   function refreshTabs() {
     subTabs.querySelectorAll('.ll-tab').forEach((el, i) => {
-      el.classList.toggle('is-active', ['albums', 'tracks'][i] === llViewerState.kind);
+      el.classList.toggle('is-active', LL_VIEWER_KINDS[i][0] === llViewerState.kind);
     });
   }
 
@@ -1186,20 +1373,23 @@ function llRenderViewerTab() {
 }
 
 function llRenderViewerTable() {
-  const source = llViewerState.kind === 'albums' ? llData.albums : llData.tracks;
+  const kind = llViewerState.kind;
+  const { source, metaKind, dateKey, dateLabel, titleLabel, path: pathKind } = llViewerKindInfo(kind);
+  const metaSide = metaKind === 'albums' ? llMeta.albums : llMeta.tracks;
   const f = llViewerState.filter.trim().toLowerCase();
-  const metaForFilter = llViewerState.kind === 'albums' ? llMeta.albums : llMeta.tracks;
   let entries = Object.entries(source).filter(([uri]) => {
     if (!f) return true;
     if (uri.toLowerCase().includes(f)) return true;
-    const m = metaForFilter[uri];
+    const m = metaSide[uri];
     return !!m && ((m.name || '').toLowerCase().includes(f) || (m.artist || '').toLowerCase().includes(f));
   });
 
   const wrap = document.createElement('div');
 
   if (entries.length === 0) {
-    wrap.innerHTML = '<p style="opacity:.6">Nothing here yet.</p>';
+    wrap.innerHTML = kind === 'wanted'
+      ? '<p style="opacity:.6">Nothing on your list yet. Right-click an album → "Want to listen".</p>'
+      : '<p style="opacity:.6">Nothing here yet.</p>';
     return wrap;
   }
 
@@ -1211,9 +1401,6 @@ function llRenderViewerTable() {
   scroll.style.cssText = 'max-height:50vh; overflow-y:auto;';
   wrap.appendChild(scroll);
 
-  const kind = llViewerState.kind;
-  const metaSide = kind === 'albums' ? llMeta.albums : llMeta.tracks;
-
   // Re-sort with name support if requested
   entries.sort((a, b) => {
     let aKey, bKey;
@@ -1224,8 +1411,8 @@ function llRenderViewerTable() {
       aKey = (metaSide[a[0]]?.artist || '').toLowerCase();
       bKey = (metaSide[b[0]]?.artist || '').toLowerCase();
     } else {
-      aKey = a[1].listenedAt;
-      bKey = b[1].listenedAt;
+      aKey = a[1][dateKey];
+      bKey = b[1][dateKey];
     }
     const cmp = aKey > bKey ? 1 : aKey < bKey ? -1 : 0;
     return llViewerState.sortDir === 'asc' ? cmp : -cmp;
@@ -1233,12 +1420,11 @@ function llRenderViewerTable() {
 
   const table = document.createElement('table');
   const thead = document.createElement('thead');
-  const titleLabel = kind === 'albums' ? 'Album' : 'Track';
   const arrow = (key) => llViewerState.sortKey === key ? (llViewerState.sortDir === 'asc' ? ' ▲' : ' ▼') : '';
   thead.innerHTML = `<tr>
     <th data-sort="name" style="white-space:nowrap">${titleLabel}<span class="ll-sort">${arrow('name')}</span></th>
     <th data-sort="artist" style="white-space:nowrap">Artist<span class="ll-sort">${arrow('artist')}</span></th>
-    <th data-sort="listenedAt" style="white-space:nowrap">Listened<span class="ll-sort">${arrow('listenedAt')}</span></th>
+    <th data-sort="${dateKey}" style="white-space:nowrap">${dateLabel}<span class="ll-sort">${arrow(dateKey)}</span></th>
     <th style="white-space:nowrap">Source</th>
     <th></th>
   </tr>`;
@@ -1251,7 +1437,7 @@ function llRenderViewerTable() {
         llViewerState.sortDir = llViewerState.sortDir === 'asc' ? 'desc' : 'asc';
       } else {
         llViewerState.sortKey = key;
-        llViewerState.sortDir = key === 'listenedAt' ? 'desc' : 'asc';
+        llViewerState.sortDir = key === dateKey ? 'desc' : 'asc';
       }
       wrap.replaceWith(llRenderViewerTable());
     });
@@ -1271,19 +1457,25 @@ function llRenderViewerTable() {
     }
     return artistName;
   };
+  const trashSvg = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3h11V2h-11v1z"/></svg>';
+  const checkSvg = `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="${LL_CHECK_SVG_PATH}"/></svg>`;
+  const actionsCell = kind === 'wanted'
+    ? `<button class="ll-btn ll-btn--icon" data-act="mark" title="Mark listened" aria-label="Mark listened">${checkSvg}</button>`
+      + `<button class="ll-btn ll-btn--icon" data-act="unwant" title="Remove from list" aria-label="Remove from list">${trashSvg}</button>`
+    : `<button class="ll-btn ll-btn--icon" data-act="unmark" title="Mark unheard" aria-label="Mark unheard">${trashSvg}</button>`;
   for (const [uri, rec] of visible) {
     const tr = document.createElement('tr');
     tr.dataset.uri = uri;
     const id = uri.split(':').pop();
-    const path = kind === 'albums' ? `/album/${id}` : `/track/${id}`;
+    const path = `/${pathKind}/${id}`;
     const m = metaSide[uri];
     const nameCell = m?.name ? escHtml(m.name) : '<span style="opacity:.4">…</span>';
     tr.innerHTML = `
       <td class="ll-name-cell"><a href="${path}" style="color:var(--spice-text)" title="${escHtml(uri)}">${nameCell}</a></td>
       <td class="ll-artist-cell" style="opacity:.85">${buildArtistCell(m)}</td>
-      <td>${new Date(rec.listenedAt).toLocaleDateString()}</td>
+      <td>${new Date(rec[dateKey]).toLocaleDateString()}</td>
       <td>${rec.source}</td>
-      <td><button class="ll-btn ll-btn--icon" data-act="unmark" title="Mark unheard" aria-label="Mark unheard"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3h11V2h-11v1z"/></svg></button></td>
+      <td style="white-space:nowrap">${actionsCell}</td>
     `;
     tr.querySelector('.ll-name-cell a').addEventListener('click', (e) => {
       e.preventDefault();
@@ -1300,10 +1492,16 @@ function llRenderViewerTable() {
         Spicetify.PopupModal.hide();
       });
     }
-    tr.querySelector('button[data-act="unmark"]').addEventListener('click', (e) => {
-      e.stopPropagation();
-      llUnmarkMany([uri]);
-      tr.remove();
+    const rowActions = {
+      unmark: () => llUnmarkMany([uri]) > 0,
+      unwant: () => llUnwantMany([uri]) > 0,
+      mark: () => llMarkMany([uri], 'manual').marked > 0,
+    };
+    tr.querySelectorAll('button[data-act]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (rowActions[btn.getAttribute('data-act')]?.()) tr.remove();
+      });
     });
     tbody.appendChild(tr);
   }
@@ -1342,7 +1540,7 @@ function llRenderViewerTable() {
     };
     llFetchMetadata(
       missing,
-      kind,
+      metaKind,
       (uri, _meta, done, total) => {
         patchRow(uri);
         const txt = status.querySelector('.ll-status-text');
@@ -1383,6 +1581,7 @@ function llRenderStatsTab() {
       <h3>Totals</h3>
       <div class="ll-row"><span>Albums listened</span><span>${albums.length}</span></div>
       <div class="ll-row"><span>Tracks listened</span><span>${tracks.length}</span></div>
+      <div class="ll-row"><span>Albums to listen</span><span>${Object.keys(llData.wanted).length}</span></div>
     </div>
     <div class="ll-section">
       <h3>Last 30 days</h3>
@@ -1434,7 +1633,38 @@ function llShouldShowUnmark(uris) {
   });
 }
 
+function llShouldShowWant(uris) {
+  return uris.some((u) => {
+    const norm = llNormalizeUri(u);
+    return !!norm && llIsAlbumUri(norm) && !llAlbumState(norm);
+  });
+}
+
+function llShouldShowUnwant(uris) {
+  return uris.some((u) => {
+    const norm = llNormalizeUri(u);
+    return !!norm && llIsAlbumUri(norm) && llIsAlbumWanted(norm);
+  });
+}
+
 function llRegisterContextMenu() {
+  const wantItem = new Spicetify.ContextMenu.Item(
+    'Want to listen',
+    (uris) => {
+      const { added, skipped } = llWantMany(uris, 'manual');
+      if (added > 0) Spicetify.showNotification?.(`Added ${added} to want-to-listen${skipped ? ` (${skipped} skipped)` : ''}`);
+      else if (!llData.__readOnly) Spicetify.showNotification?.('Nothing added (already listened or on the list)');
+    },
+    llShouldShowWant,
+  );
+  const unwantItem = new Spicetify.ContextMenu.Item(
+    'Remove from want-to-listen',
+    (uris) => {
+      const removed = llUnwantMany(uris);
+      Spicetify.showNotification?.(`Removed ${removed} from want-to-listen`);
+    },
+    llShouldShowUnwant,
+  );
   const markItem = new Spicetify.ContextMenu.Item(
     'Mark as listened',
     (uris) => {
@@ -1453,6 +1683,8 @@ function llRegisterContextMenu() {
   );
   markItem.register();
   unmarkItem.register();
+  wantItem.register();
+  unwantItem.register();
 }
 
 //#endregion
