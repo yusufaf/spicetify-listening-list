@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A single-file Spicetify extension (`listening-list.js`, ~1450 lines, no build step) that tracks which albums and tracks you've listened to and shows an inline badge across four Spotify surfaces. Everything ships as one IIFE: storage, marking, surface injectors, import/export, settings modal, and context menus.
+A single-file Spicetify extension (`listening-list.js`, ~1750 lines, no build step) that tracks which albums and tracks you've listened to and shows an inline badge across four Spotify surfaces. Everything ships as one IIFE: storage, marking, surface injectors, import/export, settings modal, and context menus.
 
 ## Commands
 
@@ -43,11 +43,13 @@ Read the `//#region` markers — they are the file's table of contents (Type Def
 
 **Auto-on-play marks once per song.** `llAOPCurrentMarked` latches on cross of `percentThreshold` and resets on `songchange`; without the latch the progress handler would re-mark on every tick.
 
+**Want-to-listen is album-only and listened always wins.** `llData.wanted` holds album URIs the user intends to hear; a URI is never in both `albums` and `wanted`. `llMarkOne` deletes the want entry when it writes a listened record, `llWantOne` refuses albums that are already listened, and `llMigrateData` / `llMergeImport` re-enforce the invariant on load and import. Album completion: when auto-on-play marks a track whose album is wanted, `llCheckWantedAlbumCompletion` fetches the album's track URIs (GraphQL `getAlbum`, cached per session) and marks the album `auto-play` once `autoSeed.minTracksPerAlbum` of them are listened. Surfaces branch on `llAlbumState()` (`'listened'` | `'wanted'` | `null`) and pass the variant to `llBadgeMarkup`.
+
 ### Storage keys
 
 | Key | Contents |
 |-----|----------|
-| `listening-list-data` | JSON `ListenedData` — schema-versioned, albums + tracks keyed by URI |
+| `listening-list-data` | JSON `ListenedData` — schema-versioned, albums + tracks (listened) and wanted albums, keyed by URI |
 | `listening-list-config` | JSON `ListenedConfig` — surfaces, badge style, auto-seed, auto-on-play |
 | `listening-list-meta` | JSON name/artist cache by URI, for the viewer and export |
 

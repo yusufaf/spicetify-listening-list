@@ -6,6 +6,7 @@ Mark albums and tracks as listened, with inline indicators across Spotify.
 
 ## Features
 - Mark albums and tracks as listened via right-click context menu
+- Want-to-listen list for albums: bookmark badge until you've heard it, then it flips to listened automatically
 - Inline badge surfaces (tracklist rows, album page header, album cards, now-playing bar) — each toggleable
 - Auto-seed listened albums from your playlists (threshold configurable)
 - Auto-mark tracks past a play-progress threshold (threshold configurable)
@@ -29,7 +30,7 @@ The extension stores two LocalStorage records: your listened items and your conf
 4. Apply: `spicetify apply`
 
 ## Usage
-Right-click any track or album → "Mark as listened". A badge appears in enabled surfaces. Open the profile menu → "Listening List" to access Settings, the Viewer, and Stats.
+Right-click any track or album → "Mark as listened". A badge appears in enabled surfaces. Right-click an album → "Want to listen" to queue it up; it shows a bookmark badge and moves to listened once you mark it or (with auto-mark on play enabled) play enough of its tracks. Open the profile menu → "Listening List" to access Settings, the Viewer (Albums / Tracks / Want to listen), and Stats.
 
 ## Screenshots
 

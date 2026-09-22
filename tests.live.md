@@ -67,3 +67,33 @@ JSON.parse(Spicetify.LocalStorage.get('listening-list-meta') || 'null')   // →
 - Add `console.log('[Listening List] HOT-RELOAD-MARKER')` near the boot log line.
 - CDP reload; console filter `HOT-RELOAD-MARKER`: must appear.
 - Revert.
+
+## T7: Data migrates v1 → v2 (want-to-listen)
+
+- Eval: write v1 data, then reload:
+  ```js
+  Spicetify.LocalStorage.set('listening-list-data', JSON.stringify({ schemaVersion: 1, albums: { 'spotify:album:4LH4d3cOWNNsVw41Gqt2kv': { listenedAt: 1700000000000, source: 'manual' } }, tracks: {} }))
+  ```
+- Right-click any other album → "Want to listen" (forces a save).
+- Eval: `JSON.parse(Spicetify.LocalStorage.get('listening-list-data'))` → `schemaVersion: 2`, original album intact, `wanted` has the new URI with `addedAt` + `source: 'manual'`.
+
+## T8: Want badge on all surfaces, flips to listened
+
+- With an album in `wanted`, open its page: header badge has class `ll-badge--wanted` and title `Want to listen · added <date>`; tracklist rows carry `ll-badge--tracklist ll-badge--wanted`, `row.dataset.llStatus === 'w'`.
+- Search that album → its card badge is `ll-badge--card ll-badge--wanted` (bookmark); a listened album's card is the check.
+- Play a track from it → now-playing badge is `ll-badge--nowplaying ll-badge--wanted`.
+- Album "..." menu shows `Mark as listened` and `Remove from want-to-listen`, not `Want to listen`.
+- Click `Mark as listened`: without reload, header/rows/cards swap to the check variant, exactly one header badge, `wanted` is `{}`.
+
+## T9: Album completion via auto-on-play
+
+- Config: `autoOnPlay.enabled = true`, `percentThreshold = 1`, `autoSeed.minTracksPerAlbum = 1`; data: one album in `wanted`. Reload.
+- `Spicetify.Player.playUri('<that album uri>')`, then `Spicetify.Player.seek(0.5)`, wait ~3 s.
+- Assert: the track is in `tracks` (`auto-play`), the album moved to `albums` with `source: 'auto-play'`, `wanted` is `{}`, notification shown, no `[Listening List] Album completion check failed` warning.
+
+## T10: Viewer "Want to listen" tab
+
+- Profile menu → Listening List → Viewer → "Want to listen".
+- Assert: columns `Album / Artist / Added ▼ / Source`, names load, empty state reads `Nothing on your list yet…` when empty.
+- Row check button → row removed, album in `albums`; row trash button → row removed, album gone from `wanted`.
+- Switch to Albums sub-tab: date column reads `Listened` and stays the active sort.
