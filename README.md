@@ -36,7 +36,7 @@ Right-click any track or album → "Mark as listened". A badge appears in enable
 
 A marked album gets a badge on its page header:
 
-![Album page header with a listened badge under the album title](album-header.png)
+![Album page header with a listened badge at the start of the artist and release line](album-header.png)
 
 The Viewer lists everything you have marked, with filtering and sorting:
 

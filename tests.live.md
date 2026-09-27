@@ -110,8 +110,16 @@ marked (wanted or listened), eval on the album page:
 
 ```js
 (() => {
-  const y = (s) => { const e = document.querySelector(s); return e ? e.getBoundingClientRect().y : null; };
-  const probe = () => [y('.main-entityHeader-metaData'), y('.main-actionBar-ActionBar'), y('[data-testid="tracklist-row"]')];
+  const y = (s) => {
+    const e = document.querySelector(s);
+    if (!e) throw new Error('probe found nothing for ' + s);   // a missing node must fail, not read as 0
+    return e.getBoundingClientRect().y;
+  };
+  const probe = () => [
+    y('.main-entityHeader-metaData'),
+    y('.main-actionBar-ActionBar'),
+    y('.main-trackList-trackListRow, [data-testid="tracklist-row"]'),
+  ];
   const before = probe();
   document.querySelectorAll('.ll-badge--header, .ll-badge--tracklist').forEach((e) => e.remove());
   const after = probe();
@@ -120,9 +128,12 @@ marked (wanted or listened), eval on the album page:
 ```
 
 - Assert: `[0, 0, 0]` for every title length, and the header badge's parent is
-  `.main-entityHeader-metaData` (not the heading).
+  `.main-entityHeader-metaData` (not the heading). A throw means the selectors
+  went stale — fix them, a null reading would score a silent pass.
 - Now-playing: with the playing track's album marked, the badge's parent must be
   the element holding the track name (an `<a>`, not `.main-trackInfo-name`), and
-  removing it must not change `.main-trackInfo-name`'s height.
+  removing it must not change `.main-trackInfo-name`'s height. It must also sit
+  *before* the text and inside `.main-trackInfo-overlay`'s box — that overlay
+  clips horizontally, so a badge after the title vanishes on long track names.
 - The metadata line must read `<badge> Artist • Year • N songs` — no stray `•`
   between the badge and the artist.

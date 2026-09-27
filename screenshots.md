@@ -71,7 +71,7 @@ Windows path.
 |---|---|---|---|
 | `preview.png` | 4 badged track rows | `--rect 470,430,210,210 --scale 3` | (Marketplace card) |
 | `tracklist-badges.png` | tracklist | `--rect 454,392,676,416 --scale 2` | badges beside each track |
-| `album-header.png` | album header | `--rect 448,72,700,220 --scale 2` | badge under album title |
+| `album-header.png` | album header | `--rect 448,72,544,196 --scale 2` | badge on the artist/release line |
 | `viewer.png` | Viewer tab | `--selector ".GenericModal" --scale 2` | marked albums list |
 | `stats.png` | Stats tab | `--selector ".GenericModal" --scale 2` | totals and breakdown |
 | `settings.png` | Settings tab | `--selector ".GenericModal" --scale 2` | surface toggles |
@@ -84,6 +84,8 @@ Modal: click `button[aria-label='<your Spotify name>']`, then
 
 - Full-viewport shots leak the sidebar playlists, Liked Songs panel, avatar, and the
   currently-playing track. Use tight rects only.
+- At `viewport 1440 900` the main view spans x 436–1004. A rect running past x≈1004 reaches
+  into the right sidebar and picks up the now-playing panel's artwork.
 - Keep clips above y≈810: the now-playing bar composites over anything lower, even when the
   clip is inside the viewport.
 - The Marketplace card centre-crops to 175×175. `preview.png` at 4 rows stays legible;
