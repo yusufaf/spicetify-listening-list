@@ -120,7 +120,7 @@ const LL_BASE_CSS = `
   .ll-badge--header { width: 18px; height: 18px; margin-right: 8px; flex: none; vertical-align: middle; }
   /* The metadata line draws "•" before each item that isn't first; the badge
      takes that slot, so drop the separator it would push onto the next item. */
-  .ll-badge--header + .main-entityHeader-metaDataText::before { content: none; }
+  .ll-badge--header + *::before { content: none !important; }
   .ll-badge-card-wrapper { position: relative; height: 0; width: 0; overflow: visible; pointer-events: none; z-index: 100; }
   .ll-badge--card { position: absolute; top: 10px; left: 10px; width: 22px; height: 22px; background: rgba(0,0,0,0.6); border-radius: 50%; padding: 3px; box-sizing: border-box; }
   .ll-badge--nowplaying { width: 12px; height: 12px; margin-left: 6px; vertical-align: middle; }
@@ -652,11 +652,12 @@ function llDecorateAlbumHeader() {
  * is a centred flex row with room to spare, so an inline badge costs no layout.
  * The title heading is not usable: it's a `-webkit-box` with `-webkit-line-clamp`,
  * where every child becomes its own row — a badge there either pushes the whole
- * page down by its height or falls past the clamp and gets cut off.
+ * page down by its height or falls past the clamp and gets cut off. So there is
+ * no heading fallback: if no metadata line is found the header badge is skipped
+ * and the other surfaces carry the state.
  */
 function llHeaderBadgeHost() {
-  return document.querySelector('.main-entityHeader-metaData')
-      || document.querySelector('.main-entityHeader-title, [data-testid="entityTitle"], main h1');
+  return llQueryFirst(['.main-entityHeader-metaData', '.main-entityHeader-subtitle']);
 }
 
 //#endregion
@@ -764,7 +765,8 @@ function llDecorateNowPlaying() {
   if (!titleEl) return;
   const span = document.createElement('span');
   span.innerHTML = llBadgeMarkup(LL_BADGE_NOWPLAYING_CLASS, state);
-  llTextLeaf(titleEl).appendChild(span.firstElementChild);
+  const leaf = llTextLeaf(titleEl);
+  leaf.insertBefore(span.firstElementChild, leaf.firstChild);
 }
 
 /**
@@ -781,13 +783,21 @@ function llQueryFirst(selectors, root = document) {
 }
 
 /**
- * The descendant that actually holds the text, so an inline badge shares its
- * line. Appended to a wrapper whose child is a block, the badge gets a line of
- * its own and grows the container by its own height.
+ * The deepest descendant that actually holds the text, so an inline badge shares
+ * its line. Appended to a wrapper whose child is a block, the badge gets a line
+ * of its own and grows the container by its own height. Deepest rather than last
+ * so a trailing label ("E", a marquee clone) can't capture the badge.
  */
 function llTextLeaf(el) {
   const holdsText = (e) => [...e.childNodes].some((n) => n.nodeType === Node.TEXT_NODE && n.data.trim());
-  return [...el.querySelectorAll('*')].reverse().find(holdsText) || el;
+  let best = null, bestDepth = -1;
+  for (const cand of el.querySelectorAll('*')) {
+    if (!holdsText(cand)) continue;
+    let depth = 0;
+    for (let p = cand.parentElement; p && p !== el; p = p.parentElement) depth++;
+    if (depth > bestDepth) { best = cand; bestDepth = depth; }
+  }
+  return best || el;
 }
 
 //#endregion
