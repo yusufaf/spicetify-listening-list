@@ -117,10 +117,13 @@ const LL_GITHUB_REPO = 'yusufaf/spicetify-listening-list';
 const LL_BASE_CSS = `
   .ll-badge { display: inline-flex; align-items: center; justify-content: center; color: var(--spice-button, #1ed760); pointer-events: none; }
   .ll-badge--tracklist { width: 14px; height: 14px; margin-right: 6px; vertical-align: middle; }
-  .ll-badge--header { width: 18px; height: 18px; margin-left: 8px; vertical-align: middle; }
+  .ll-badge--header { width: 18px; height: 18px; margin-right: 8px; flex: none; vertical-align: middle; }
+  /* The metadata line draws "•" before each item that isn't first; the badge
+     takes that slot, so drop the separator it would push onto the next item. */
+  .ll-badge--header + *::before { content: none !important; }
   .ll-badge-card-wrapper { position: relative; height: 0; width: 0; overflow: visible; pointer-events: none; z-index: 100; }
   .ll-badge--card { position: absolute; top: 10px; left: 10px; width: 22px; height: 22px; background: rgba(0,0,0,0.6); border-radius: 50%; padding: 3px; box-sizing: border-box; }
-  .ll-badge--nowplaying { width: 12px; height: 12px; margin-left: 6px; vertical-align: middle; }
+  .ll-badge--nowplaying { width: 12px; height: 12px; margin-right: 6px; vertical-align: middle; }
   .ll-badge--style-dot svg { display: none; }
   .ll-badge--style-dot::after { content: ""; display: block; width: 6px; height: 6px; border-radius: 50%; background: var(--spice-button, #1ed760); }
   .ll-badge--style-text svg { display: none; }
@@ -614,9 +617,9 @@ function llCurrentAlbumUriFromRoute() {
 
 function llDecorateAlbumHeader() {
   const uri = llCurrentAlbumUriFromRoute();
-  const title = document.querySelector('.main-entityHeader-title, [data-testid="entityTitle"] h1, [data-testid="entityTitle"], main h1');
-  const state = title ? llAlbumState(uri) : null;
-  const current = title?.querySelector(`.${LL_BADGE_HEADER_CLASS}`) || null;
+  const host = llHeaderBadgeHost();
+  const state = host ? llAlbumState(uri) : null;
+  const current = host?.querySelector(`.${LL_BADGE_HEADER_CLASS}`) || null;
   // A badge of the wrong variant (want → listened flip) counts as stale.
   const existing = current && llBadgeVariant(current) === state ? current : null;
 
@@ -641,7 +644,20 @@ function llDecorateAlbumHeader() {
     const rec = llData.wanted[uri];
     if (rec?.addedAt) badge.setAttribute('title', `Want to listen · added ${new Date(rec.addedAt).toLocaleDateString()}`);
   }
-  title.appendChild(badge);
+  host.insertBefore(badge, host.firstChild);
+}
+
+/**
+ * Where the album-header badge goes. The metadata line ("artist • year • N songs")
+ * is a centred flex row with room to spare, so an inline badge costs no layout.
+ * The title heading is not usable: it's a `-webkit-box` with `-webkit-line-clamp`,
+ * where every child becomes its own row — a badge there either pushes the whole
+ * page down by its height or falls past the clamp and gets cut off. So there is
+ * no heading fallback: if no metadata line is found the header badge is skipped
+ * and the other surfaces carry the state.
+ */
+function llHeaderBadgeHost() {
+  return llQueryFirst(['.main-entityHeader-metaData', '.main-entityHeader-subtitle']);
 }
 
 //#endregion
@@ -739,11 +755,49 @@ function llDecorateNowPlaying() {
   const listened = (trackUri && llIsTrackListened(trackUri)) || (albumUri && llIsAlbumListened(albumUri));
   const state = listened ? 'listened' : (albumUri && llIsAlbumWanted(albumUri)) ? 'wanted' : null;
   if (!state) return;
-  const titleEl = document.querySelector('.main-trackInfo-name a, .main-trackInfo-name, [data-testid="context-item-info-title"] a, [data-testid="context-item-info-title"], [data-testid="now-playing-widget"] a[href^="/album/"], [data-testid="now-playing-widget"] a[href^="/track/"], [data-testid="now-playing-widget"] a');
+  const titleEl = llQueryFirst([
+    '.main-trackInfo-name',
+    '[data-testid="context-item-info-title"]',
+    '[data-testid="now-playing-widget"] a[href^="/album/"]',
+    '[data-testid="now-playing-widget"] a[href^="/track/"]',
+    '[data-testid="now-playing-widget"] a',
+  ]);
   if (!titleEl) return;
   const span = document.createElement('span');
   span.innerHTML = llBadgeMarkup(LL_BADGE_NOWPLAYING_CLASS, state);
-  titleEl.appendChild(span.firstElementChild);
+  const leaf = llTextLeaf(titleEl);
+  leaf.insertBefore(span.firstElementChild, leaf.firstChild);
+}
+
+/**
+ * First selector in the list that matches. `querySelector` with a comma-joined
+ * list returns the match earliest in the document, not the earliest selector,
+ * so it hands back the outer wrapper whenever one is listed alongside its child.
+ */
+function llQueryFirst(selectors, root = document) {
+  for (const sel of selectors) {
+    const el = root.querySelector(sel);
+    if (el) return el;
+  }
+  return null;
+}
+
+/**
+ * The deepest descendant that actually holds the text, so an inline badge shares
+ * its line. Appended to a wrapper whose child is a block, the badge gets a line
+ * of its own and grows the container by its own height. Deepest rather than last
+ * so a trailing label ("E", a marquee clone) can't capture the badge.
+ */
+function llTextLeaf(el) {
+  const holdsText = (e) => [...e.childNodes].some((n) => n.nodeType === Node.TEXT_NODE && n.data.trim());
+  let best = null, bestDepth = -1;
+  for (const cand of el.querySelectorAll('*')) {
+    if (!holdsText(cand)) continue;
+    let depth = 0;
+    for (let p = cand.parentElement; p && p !== el; p = p.parentElement) depth++;
+    if (depth > bestDepth) { best = cand; bestDepth = depth; }
+  }
+  return best || el;
 }
 
 //#endregion
