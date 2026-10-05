@@ -1,5 +1,9 @@
 # Spicetify Listening List
 
+<!-- site:skip-start -->
+**Documentation:** https://spicetify.yusufaf.dev/listening-list/
+<!-- site:skip-end -->
+
 Mark albums and tracks as listened, with inline indicators across Spotify.
 
 ![Listened badges beside each track on an album tracklist](tracklist-badges.png)
