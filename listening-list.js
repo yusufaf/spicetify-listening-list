@@ -114,6 +114,10 @@ const LL_VERSION = '1.0.0';
 /** GitHub repo slug, used to build the "report an issue" link in the settings modal footer */
 const LL_GITHUB_REPO = 'yusufaf/spicetify-listening-list';
 
+/** Docs page for this extension and the hub listing the others, linked from the settings modal footer */
+const LL_DOCS_URL = 'https://spicetify.yusufaf.dev/listening-list/';
+const LL_HUB_URL = 'https://spicetify.yusufaf.dev/';
+
 const LL_BASE_CSS = `
   .ll-badge { display: inline-flex; align-items: center; justify-content: center; color: var(--spice-button, #1ed760); pointer-events: none; }
   .ll-badge--tracklist { width: 14px; height: 14px; margin-right: 6px; vertical-align: middle; }
@@ -1113,6 +1117,23 @@ const LL_MODAL_CSS = `
     font-size: 0.75rem;
   }
 
+  #${LL_MODAL_ROOT_ID} .ll-modal-footer-links {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  #${LL_MODAL_ROOT_ID} .ll-modal-footer-link {
+    color: var(--spice-subtext, #999);
+    font-size: 0.75rem;
+    text-decoration: none;
+  }
+
+  #${LL_MODAL_ROOT_ID} .ll-modal-footer-link:hover {
+    color: var(--spice-text, #fff);
+    text-decoration: underline;
+  }
+
   #${LL_MODAL_ROOT_ID} .ll-modal-github-link {
     display: inline-flex;
     align-items: center;
@@ -1173,9 +1194,13 @@ function llOpenModal(tab) {
   footer.className = 'll-modal-footer';
   footer.innerHTML = `
     <span class="ll-modal-version">v${LL_VERSION}</span>
-    <a class="ll-modal-github-link" href="https://github.com/${LL_GITHUB_REPO}/issues/new" target="_blank" rel="noopener noreferrer" title="Report an issue on GitHub">
-      <svg viewBox="0 0 16 16" class="ll-modal-github-icon"><path d="${LL_GITHUB_SVG_PATH}"/></svg>
-    </a>
+    <div class="ll-modal-footer-links">
+      <a class="ll-modal-footer-link" href="${LL_DOCS_URL}" target="_blank" rel="noopener noreferrer" title="Listening List documentation">Docs</a>
+      <a class="ll-modal-footer-link" href="${LL_HUB_URL}" target="_blank" rel="noopener noreferrer" title="More Spicetify extensions by yusufaf">More extensions</a>
+      <a class="ll-modal-github-link" href="https://github.com/${LL_GITHUB_REPO}/issues/new" target="_blank" rel="noopener noreferrer" title="Report an issue on GitHub">
+        <svg viewBox="0 0 16 16" class="ll-modal-github-icon"><path d="${LL_GITHUB_SVG_PATH}"/></svg>
+      </a>
+    </div>
   `;
   root.appendChild(footer);
 
