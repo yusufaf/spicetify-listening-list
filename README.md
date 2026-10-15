@@ -22,16 +22,26 @@ Mark albums and tracks as listened, with inline indicators across Spotify.
 The extension stores two LocalStorage records: your listened items and your configuration. DOM observers attach small badges to tracklist rows, album headers, album cards, and the now-playing bar based on whichever surfaces you enable.
 
 ## Installation
-### Prerequisites
-- [Spicetify](https://spicetify.app/) installed and applied at least once
 
-### Steps
-1. Download `listening-list.js`
-2. Place it in your Spicetify extensions folder:
-   - Windows: `%APPDATA%\spicetify\Extensions\`
-   - macOS / Linux: `~/.config/spicetify/Extensions/`
-3. Register: `spicetify config extensions listening-list.js`
-4. Apply: `spicetify apply`
+Requires [Spicetify](https://spicetify.app/docs/getting-started), installed and applied at least once. The Marketplace route also needs the [Spicetify Marketplace](https://spicetify.app/docs/customization/marketplace) custom app.
+
+### From Spicetify Marketplace
+
+1. In Spotify, open **Marketplace** (the shopping-cart icon at the top left) and stay on the **Extensions** tab.
+2. Search for `Listening List`. If it doesn't show up, click **Load more** (» at the bottom of the list) until it does. Marketplace loads extensions in batches and only searches the ones it has loaded.
+3. Hover the **Listening List** card, click its download button, then click **Reload now**.
+
+### Manually
+
+1. Download [`listening-list.js`](https://raw.githubusercontent.com/yusufaf/spicetify-listening-list/main/listening-list.js) (right-click → **Save link as…**) into your Spicetify `Extensions` folder:
+   - Windows: `%APPDATA%\spicetify\Extensions`
+   - macOS / Linux: `~/.config/spicetify/Extensions`
+2. Enable it and apply:
+
+   ```bash
+   spicetify config extensions listening-list.js
+   spicetify apply
+   ```
 
 ## Usage
 Right-click any track or album → "Mark as listened". A badge appears in enabled surfaces. Right-click an album → "Want to listen" to queue it up; it shows a bookmark badge and moves to listened once you mark it or (with auto-mark on play enabled) play enough of its tracks. Open the profile menu → "Listening List" to access Settings, the Viewer (Albums / Tracks / Want to listen), and Stats.
