@@ -1801,10 +1801,20 @@ function llHealth() {
       rows: document.querySelectorAll('[data-ll-status]').length,
       badges: document.querySelectorAll(`.${LL_BADGE_CLASS}:not(.${LL_BADGE_NOWPLAYING_CLASS})`).length,
     },
-    errors: llData?.__readOnly
-      ? [`Data schema v${llData.schemaVersion} is newer than supported v${LL_DATA_SCHEMA_VERSION}; writes disabled`]
-      : [],
+    errors: [
+      ...(llData?.__readOnly
+        ? [`Data schema v${llData.schemaVersion} is newer than supported v${LL_DATA_SCHEMA_VERSION}; writes disabled`]
+        : []),
+      ...llMissingBadgeErrors(),
+    ],
   };
+}
+
+function llMissingBadgeErrors() {
+  const missing = document.querySelectorAll(
+    `[data-ll-status="1"]:not(:has(.${LL_BADGE_TRACKLIST_CLASS})), [data-ll-status="w"]:not(:has(.${LL_BADGE_TRACKLIST_CLASS}))`
+  ).length;
+  return missing ? [`Badge slot not found on ${missing} tracklist row(s)`] : [];
 }
 
 async function main() {
