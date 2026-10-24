@@ -537,6 +537,7 @@ function llStopTracklistSurface() {
   llTracklistHistoryUnlisten?.();
   llTracklistHistoryUnlisten = null;
   document.querySelectorAll(`.${LL_BADGE_TRACKLIST_CLASS}`).forEach((el) => el.remove());
+  document.querySelectorAll('[data-ll-status]').forEach((row) => delete row.dataset.llStatus);
 }
 
 function llDecorateAllTracklistRows() {
