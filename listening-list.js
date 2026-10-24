@@ -540,7 +540,7 @@ function llStopTracklistSurface() {
 }
 
 function llDecorateAllTracklistRows() {
-  const rows = document.querySelectorAll('.main-trackList-trackListRow, [data-testid="tracklist-row"]');
+  const rows = document.querySelectorAll('.main-trackList-trackListRow, [data-testid="tracklist-row"], #main-view [role="grid"] [role="row"][aria-rowindex] > [role="presentation"]');
   rows.forEach(llDecorateTracklistRow);
 }
 
@@ -566,7 +566,7 @@ function llDecorateTracklistRow(row) {
   }
   if (state) {
     if (!existing) {
-      const titleSlot = row.querySelector('.main-trackList-rowMainContentTitle, [data-testid="internal-track-link"], .main-trackList-rowTitle, [data-testid="tracklist-row-title"]');
+      const titleSlot = row.querySelector('.main-trackList-rowMainContentTitle, [data-testid="internal-track-link"], .main-trackList-rowTitle, [data-testid="tracklist-row-title"], [role="gridcell"][aria-colindex="2"] div[data-encore-id="text"]');
       if (titleSlot) {
         const wrap = document.createElement('span');
         wrap.innerHTML = llBadgeMarkup(LL_BADGE_TRACKLIST_CLASS, state);
