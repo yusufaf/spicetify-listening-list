@@ -1794,6 +1794,19 @@ function llRegisterProfileMenu() {
 
 //#region Main
 
+function llHealth() {
+  return {
+    ready: true,
+    anchors: {
+      rows: document.querySelectorAll('[data-ll-status]').length,
+      badges: document.querySelectorAll(`.${LL_BADGE_CLASS}:not(.${LL_BADGE_NOWPLAYING_CLASS})`).length,
+    },
+    errors: llData?.__readOnly
+      ? [`Data schema v${llData.schemaVersion} is newer than supported v${LL_DATA_SCHEMA_VERSION}; writes disabled`]
+      : [],
+  };
+}
+
 async function main() {
   while (
     !Spicetify?.Platform?.History ||
@@ -1829,6 +1842,8 @@ async function main() {
   llStartNowPlayingSurface();
   llRegisterProfileMenu();
   llStartAutoOnPlay();
+
+  (window.__spicetifyHealth ??= {})['listening-list'] = llHealth;
 
   if (llConfig.autoSeed.enabled && !llConfig.autoSeed.lastSeededAt) {
     llRunAutoSeed()
